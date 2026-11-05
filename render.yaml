@@ -1,9 +1,27 @@
 services:
+  # Full demo with the NuraLogix DeepAffex face scan (Node server: token endpoint + cross-origin isolation)
+  - type: web
+    name: elia-oman-demo
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: DFX_LICENSE_KEY
+        sync: false
+      - key: DFX_STUDY_ID
+        sync: false
+      - key: DFX_API_URL
+        value: https://api.deepaffex.ai
+      - key: NODE_VERSION
+        value: "22"
+  # Static copy of the same page (on-device scan only)
   - type: web
     name: elia-demo
     runtime: static
-    buildCommand: echo "static site"
-    staticPublishPath: .
+    buildCommand: npm ci && npm run build
+    staticPublishPath: public
     headers:
       - path: /*
         name: Permissions-Policy
