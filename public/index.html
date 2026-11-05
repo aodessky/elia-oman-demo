@@ -257,7 +257,8 @@ h2,h3,h4,.big b,.brand b{font-family:var(--f-display)}
 .panel.click{cursor:pointer;text-align:start;width:100%}
 .panel.click:hover{border-color:color-mix(in srgb,var(--teal) 50%,var(--line))}
 .panel.hero{background:linear-gradient(150deg,var(--mint-2),var(--surface) 70%)}
-.kv{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 14px;font-size:13.5px;align-items:center}
+.kv{display:grid;grid-template-columns:minmax(6.5em,max-content) minmax(0,1fr);gap:8px 14px;font-size:13.5px;align-items:center}
+.kv>*{min-width:0;overflow-wrap:anywhere}.kv>:nth-child(even){text-align:end}.simcard .kv>:nth-child(even){text-align:start}
 .kv .k{color:var(--muted)}
 .empty{border:1.5px dashed var(--line);border-radius:var(--r);padding:28px;text-align:center;color:var(--muted);font-size:14px;background:var(--surface-2)}
 .action{border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
@@ -325,8 +326,8 @@ h2,h3,h4,.big b,.brand b{font-family:var(--f-display)}
   .stage[data-view="hq"] .phone{display:none}
   .phone{position:static;height:calc(100vh - 170px);height:calc(100dvh - 170px);min-height:500px;border-width:0;border-radius:20px}
   .sbar{display:none}
-  .hq{grid-template-columns:minmax(0,1fr);border-radius:18px}
-  .hq-nav{flex-direction:row;overflow-x:auto;border-inline-end:0;border-bottom:1px solid var(--line);padding:8px}
+  .hq{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);align-items:start;border-radius:18px}
+  .hq-nav{flex-direction:row;overflow-x:auto;border-inline-end:0;border-bottom:1px solid var(--line);padding:8px;align-self:start;align-items:center;height:auto}
   .hq-nav .hq-title,.hq-nav .auth{display:none}
   .hq-nav button{white-space:nowrap}
   .grid2{grid-template-columns:minmax(0,1fr)}
@@ -1460,7 +1461,20 @@ const REC_KW=/\b(?:records?|chart|medical history|medications?|medicines?|meds|p
 const REC_QF=/\?|؟|^\s*(?:what|what's|whats|when|which|who|how|why|do|did|does|am|is|are|was|were|have|has|can|could|should|show|list|tell|explain|summari[sz]e|remind|give)\b|^\s*(?:qu[eé]|cu[aá]l|cu[aá]ndo|qui[eé]n|c[oó]mo|por qu[eé]|tengo|estoy|mu[eé]strame|dime|expl[ií]ca|res[uú]me|cu[aá]ntos?)\b|^\s*(?:ما|ماذا|متى|من|كيف|لماذا|هل|اعرض|اشرح|لخص|أخبرني)/i;
 function isRecQuestion(x){return REC_KW.test(x)&&(REC_QF.test(x)||/\bmy (?:record|chart|labs?|results?|notes?|medications?|allerg)/i.test(x))}
 let SAMPLE_P=null,sampleOff=false;
-function getSample(){if(!SAMPLE_P)SAMPLE_P=(window.claude&&typeof claude.use==="function")?claude.use("sample").catch(()=>null):Promise.resolve(null);return SAMPLE_P}
+function getSample(){if(!SAMPLE_P)SAMPLE_P=(window.claude&&typeof claude.use==="function")?claude.use("sample").catch(()=>null):serverSample();return SAMPLE_P}
+/* Hosted version: Claude through the site's own server (/api/ai). Same interface as the artifact runtime's sample(). */
+let APPCFG=null,APPCFG_V=null;
+function appConfig(){if(!APPCFG)APPCFG=(location.protocol.startsWith("http")?fetch("/api/config",{cache:"no-store"}).then(r=>r.ok?r.json():{}).catch(()=>({})):Promise.resolve({})).then(c=>(APPCFG_V=c||{}));return APPCFG}
+appConfig();
+async function serverSample(){const c=await appConfig();if(!c.ai)return null;
+  const shrink=f=>new Promise(res=>{const img=new Image(),u=URL.createObjectURL(f);img.onload=()=>{const k=Math.min(1,1568/Math.max(img.width,img.height));const cv=document.createElement("canvas");cv.width=Math.round(img.width*k);cv.height=Math.round(img.height*k);cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height);URL.revokeObjectURL(u);res(cv.toDataURL("image/jpeg",0.85).split(",")[1])};img.onerror=()=>{URL.revokeObjectURL(u);res(null)};img.src=u});
+  async function call(input,o={}){const list=o.images?(Array.isArray(o.images)?o.images:[o.images]):[];const images=[];for(const f of list.slice(0,3)){const d=await shrink(f);if(d)images.push({media_type:"image/jpeg",data:d})}
+    const r=await fetch("/api/ai",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({input,images,tier:o.modelTier||"default"})});const j=await r.json().catch(()=>({}));
+    if(!r.ok){const e=new Error(j.error||"ai_error");e.code=r.status===429?"rate_limited":(j.error||"ai_error");throw e}
+    if(o.onText)o.onText({text:j.text,delta:j.text});return{text:j.text,truncated:!!j.truncated}}
+  const s=(i,o)=>call(i,o);
+  s.json=async(i,o)=>{const r=await call(i,o);const m=(r.text||"").match(/[\[{][\s\S]*[\]}]/);if(!m){const e=new Error("bad_json");e.code="bad_json";throw e}return JSON.parse(m[0])};
+  s.limits=async()=>({images:true});return s}
 const LANG_NAME={en:"English",es:"Spanish (Mexico)",ar:"Modern Standard Arabic"};
 function recPrompt(){const num=t("emerg_val");return`You are ELIA, Prime Health's AI health companion. The member is asking about THEIR OWN health record, shown below (synthetic sample data in FHIR form, flattened to text).
 Rules:
@@ -1902,12 +1916,12 @@ const DFXP={
   BP_RPP:{l:["Cardiac workload","Carga de trabajo cardiaca","عبء عمل القلب"],u:"",d:1},
   BP_TAU:{l:["Vascular capacity","Capacidad vascular","السعة الوعائية"],u:"",d:1},
   IHB_COUNT:{l:["Irregular heartbeats","Latidos irregulares","ضربات قلب غير منتظمة"],u:"",d:0},
-  HEALTH_SCORE:{l:["Overall wellness score","Puntaje general de bienestar","مؤشر العافية العام"],u:"",d:0},
-  VITAL_SCORE:{l:["Vitals score","Puntaje de signos vitales","مؤشر العلامات الحيوية"],u:"",d:0},
-  PHYSIO_SCORE:{l:["Physiological score","Puntaje fisiológico","المؤشر الفسيولوجي"],u:"",d:0},
-  MENTAL_SCORE:{l:["Mental score","Puntaje mental","المؤشر النفسي"],u:"",d:0},
-  PHYSICAL_SCORE:{l:["Physical score","Puntaje físico","المؤشر البدني"],u:"",d:0},
-  RISKS_SCORE:{l:["Risks score","Puntaje de riesgos","مؤشر المخاطر"],u:"",d:0},
+  HEALTH_SCORE:{l:["Overall wellness score","Puntaje general de bienestar","مؤشر العافية العام"],u:"",d:1},
+  VITAL_SCORE:{l:["Vitals score","Puntaje de signos vitales","مؤشر العلامات الحيوية"],u:"",d:1},
+  PHYSIO_SCORE:{l:["Physiological score","Puntaje fisiológico","المؤشر الفسيولوجي"],u:"",d:1},
+  MENTAL_SCORE:{l:["Mental score","Puntaje mental","المؤشر النفسي"],u:"",d:1},
+  PHYSICAL_SCORE:{l:["Physical score","Puntaje físico","المؤشر البدني"],u:"",d:1},
+  RISKS_SCORE:{l:["Risks score","Puntaje de riesgos","مؤشر المخاطر"],u:"",d:1},
   HBA1C_RISK_PROB:{l:["Chance of elevated HbA1c","Probabilidad de HbA1c elevada","احتمال ارتفاع HbA1c"],u:"%",d:0},
   DBT_RISK_PROB:{l:["Chance of type 2 diabetes","Probabilidad de diabetes tipo 2","احتمال السكري من النوع الثاني"],u:"%",d:0},
   MFBG_RISK_PROB:{l:["Chance of high fasting glucose","Probabilidad de glucosa en ayunas alta","احتمال ارتفاع سكر الصيام"],u:"%",d:0},
@@ -1958,6 +1972,68 @@ Object.assign(L.es,{dfx_brand:"NuraLogix DeepAffex",fs_preparing:"Preparando un 
 Object.assign(L.ar,{dfx_brand:"NuraLogix DeepAffex",fs_preparing:"جارٍ تجهيز فحص آمن…",fs_downloading:"جارٍ تجهيز الفحص… {p}%",fs_dir:"انظر مباشرة إلى الكاميرا",fs_backlit:"يوجد ضوء قوي خلفك. اجعل الضوء أمام وجهك",fs_imgq:"الصورة غير واضحة. امسح العدسة أو ابحث عن إضاءة أفضل",fs_lowfps:"الكاميرا بطيئة. ابحث عن إضاءة أقوى أو أغلق التطبيقات الأخرى",
   fs_dfx_analyzing:"جارٍ تحليل إشارة تدفق الدم في وجهك…",fs_dfx_unavail:"فحص NuraLogix الكامل غير متاح الآن. يمكنك استخدام الفحص على الجهاز بدلًا منه، وهو يقيس معدل النبض والتنفس وتقلب نبض القلب.",fs_use_device:"استخدام الفحص على الجهاز",fs_cam_denied:"لم أتمكن من فتح الكاميرا. اسمح بالوصول إلى الكاميرا لهذا الموقع ثم حاول مرة أخرى.",
   dfx_res_sub:"مقاس من تدفق الدم في وجهك خلال نحو 30 ثانية",dfx_more:"قياسات إضافية ({n})",dfx_snr:"جودة الإشارة",dfx_pred_demog:"استخدمت بعض التقديرات عمرًا أو حجم جسم متوقعًا لعدم توفر هذه البيانات.",dfx_degraded:"كانت دقة بعض القياسات أقل في هذا الفحص.",dfx_disc:"تقديرات للعافية من NuraLogix DeepAffex، وليست تشخيصًا."});
+/* ============ Google Calendar (hosted version: OAuth and Calendar API calls run on the site's server) ============ */
+const GCAL={sid:null,email:null};
+const CAL_WIN={slot_am:[[7,0],[9,0]],slot_noon:[[12,30],[14,0]],slot_pm:[[17,30],[20,0]]};
+async function gpost(action,body){const r=await fetch("/api/google/"+action,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sid:GCAL.sid,...body})});const j=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(j.error||"google");e.status=r.status;throw e}return j}
+function calConnect(){
+  if(GCAL.sid){calPropose();return}
+  if(!(APPCFG_V&&APPCFG_V.google)){bot(`<p>${t("cal_unavail")}</p>`);askSlotAgain();return}
+  const sid=(crypto.randomUUID?crypto.randomUUID():String(Math.random()).slice(2)+Date.now())+"-"+Date.now().toString(36);
+  const w=window.open("/api/google/auth?sid="+encodeURIComponent(sid),"elia-google","width=520,height=680");
+  if(!w){bot(t("cal_popup_blocked"));askSlotAgain(true);return}
+  bot(t("cal_opening"));
+  let bc=null;try{bc=new BroadcastChannel("elia-google")}catch(e){}
+  if(!bc){bot(t("cal_failed"));askSlotAgain(true);return}
+  const done=()=>{clearTimeout(timer);try{bc.close()}catch(e){}};
+  const timer=setTimeout(()=>{done();if(!GCAL.sid){bot(t("cal_timeout"));askSlotAgain(true)}},300000);
+  bc.onmessage=e=>{const d=e.data||{};if(d.sid!==sid)return;done();
+    if(!d.ok){bot(t("cal_failed"));askSlotAgain(true);return}
+    GCAL.sid=sid;GCAL.email=d.email||null;setFact("calendar",`Google Calendar${d.email?" · "+d.email:""}`,"src_chat","cf_conf");addUpdate(()=>t("cal_connected_upd"));renderHQ();
+    bot(t("cal_connected",{email:esc(d.email||"Google")}));calPropose()}}
+const pad2=n=>String(n).padStart(2,"0");
+const localIso=d=>`${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}:00`;
+async function calPropose(win){const a=getAct("move");if(!a){afterMove();return}
+  const need={freq3:3,freq5:5,daily:7}[a.freq]||3,dur=(a.min||20)*60000;
+  const day0=new Date();day0.setDate(day0.getDate()+1);day0.setHours(0,0,0,0);const end=new Date(day0);end.setDate(end.getDate()+7);
+  let busy;try{busy=(await gpost("freebusy",{timeMin:day0.toISOString(),timeMax:end.toISOString(),timeZone:TZ})).busy.map(b=>[Date.parse(b.start),Date.parse(b.end)])}
+  catch(e){if(e.status===401){GCAL.sid=null;bot(t("cal_expired"));askSlotAgain(true)}else{bot(t("cal_err"));askSlotAgain(true)}return}
+  const free=(s,e)=>!busy.some(([b0,b1])=>s<b1&&e>b0);
+  const fits=k=>{const [[h0,m0],[h1,m1]]=CAL_WIN[k],out=[];for(let i=0;i<7;i++){const d=new Date(day0);d.setDate(d.getDate()+i);
+      for(let t0=new Date(d.getFullYear(),d.getMonth(),d.getDate(),h0,m0);t0.getHours()*60+t0.getMinutes()+dur/60000<=h1*60+m1;t0=new Date(t0.getTime()+15*60000)){if(free(t0.getTime(),t0.getTime()+dur)){out.push(t0);break}}}return out};
+  let key=win||S.slot;let opts=key?fits(key):[];
+  if(!win&&opts.length<need){const best=Object.keys(CAL_WIN).map(k=>[k,fits(k)]).sort((x,y)=>y[1].length-x[1].length)[0];key=best[0];opts=best[1]}
+  if(!opts.length){bot(t("cal_none_free",{min:a.min||20}));calOtherTimes();return}
+  /* spread sessions across the week */
+  let pick=[];if(opts.length<=need)pick=opts;else{const step=opts.length/need;for(let i=0;i<need;i++)pick.push(opts[Math.floor(i*step)])}
+  S.calPlan={key,items:pick.map(s=>({start:s,end:new Date(s.getTime()+dur)}))};
+  const fmtD=d=>d.toLocaleDateString(LOCALE[S.lang],{weekday:"short",month:"short",day:"numeric"}),fmtT=d=>d.toLocaleTimeString(LOCALE[S.lang],{hour:"numeric",minute:"2-digit"});
+  const rows=S.calPlan.items.map(x=>`<li><b>${fmtD(x.start)}</b> · ${fmtT(x.start)}–${fmtT(x.end)}</li>`).join("");
+  bot(`<div class="card"><div class="card-h"><span class="eyebrow">${t("cal_prop_t")}</span><span class="ph">Google Calendar</span></div><p class="note" style="margin:-4px 0 0">${t("cal_prop_sub",{email:esc(GCAL.email||"Google")})}</p><p style="margin:0"><b>${esc(actTitle(a))}</b></p><ul class="plain">${rows}</ul>${pick.length<need?`<p class="note">${t("cal_fewer",{n:pick.length})}</p>`:""}</div>`,{cls:"wide"});
+  replies([[t("cal_add"),calAdd],[t("cal_other"),calOtherTimes],[t("cal_notnow"),()=>{bot(t("cal_skip"));askSlotAgain()}]])}
+function calOtherTimes(){bot(t("cal_which"));replies(Object.keys(CAL_WIN).map(k=>[t(k),()=>{S.slot=k;calPropose(k)}]).concat([[t("cal_notnow"),()=>{bot(t("cal_skip"));askSlotAgain()}]]))}
+async function calAdd(){const a=getAct("move"),P=S.calPlan;if(!a||!P)return;const act=(A()[a.activity||"walk"]||"").replace(/^./,c=>c.toUpperCase());
+  const links=[];let fail=0;
+  for(const x of P.items){try{const r=await gpost("events",{timeZone:TZ,event:{summary:`${act} · ${a.min||20} min (ELIA)`,description:t("cal_desc"),start:localIso(x.start),end:localIso(x.end),recurrence:["RRULE:FREQ=WEEKLY;COUNT=4"]}});links.push({x,link:r.htmlLink})}
+    catch(e){fail++;if(e.status===401){GCAL.sid=null;bot(t("cal_expired"));askSlotAgain(true);return}}}
+  if(!links.length){bot(t("cal_err"));askSlotAgain(true);return}
+  a.slot=P.key;S.slot=P.key;a.cal=links.map(l=>({start:l.x.start.toISOString(),link:l.link}));renderHQ();
+  addUpdate(()=>t("cal_added_upd",{n:links.length}));
+  const fmtD=d=>d.toLocaleDateString(LOCALE[S.lang],{weekday:"long"}),fmtT=d=>d.toLocaleTimeString(LOCALE[S.lang],{hour:"numeric",minute:"2-digit"});
+  bot(`<p>${t("cal_added",{n:links.length})}</p><ul class="plain">${links.map(l=>`<li>${fmtD(l.x.start)} · ${fmtT(l.x.start)} · <a href="${esc(l.link)}" target="_blank" rel="noopener">${t("cal_open")}</a></li>`).join("")}</ul>${fail?`<p class="note">${t("cal_partial",{n:fail})}</p>`:""}`);
+  afterMove()}
+Object.assign(L.en,{cal_btn:"Connect Google Calendar",cal_opening:"Opening Google sign-in in a new window. Choose your account and allow ELIA to see when you're free and add events.",cal_popup_blocked:"Your browser blocked the sign-in window. Allow pop-ups for this site, then tap Connect Google Calendar again.",cal_failed:"Google Calendar didn't connect. You can try again, or just pick a time.",cal_timeout:"I didn't hear back from Google. You can try again, or just pick a time.",
+  cal_connected:"Connected to Google Calendar ({email}). Let me look at your week…",cal_connected_upd:"Google Calendar connected",cal_unavail:"Calendar connection isn't available in this version of ELIA. For now, pick the time that suits you best.",cal_none_free:"I couldn't find a free {min}-minute slot at that time of day this week.",cal_which:"Which time of day works better?",
+  cal_prop_t:"Here's what fits your week",cal_prop_sub:"Free times in your Google Calendar ({email}). Each one repeats weekly for 4 weeks.",cal_fewer:"Only {n} free slots this week at this time of day.",cal_add:"Add to my calendar",cal_other:"Different times",cal_notnow:"Not now",cal_skip:"No problem. Pick the time that suits you and I'll remember it.",
+  cal_added:"Added {n} sessions to your Google Calendar, with a reminder 10 minutes before each.",cal_added_upd:"{n} sessions added to Google Calendar",cal_open:"Open",cal_partial:"{n} couldn't be added.",cal_expired:"Your Google Calendar connection expired. Tap Connect Google Calendar to reconnect.",cal_err:"Google Calendar didn't accept that, so nothing was added. You can try again or pick a time.",cal_desc:"Planned with ELIA by Prime Health. Message ELIA to change it."});
+Object.assign(L.es,{cal_btn:"Conectar Google Calendar",cal_opening:"Abriendo el inicio de sesión de Google en una ventana nueva. Elige tu cuenta y permite que ELIA vea cuándo estás libre y agregue eventos.",cal_popup_blocked:"Tu navegador bloqueó la ventana de inicio de sesión. Permite ventanas emergentes para este sitio y toca Conectar Google Calendar de nuevo.",cal_failed:"Google Calendar no se conectó. Puedes intentarlo de nuevo o elegir un horario.",cal_timeout:"No recibí respuesta de Google. Puedes intentarlo de nuevo o elegir un horario.",
+  cal_connected:"Conectado a Google Calendar ({email}). Déjame ver tu semana…",cal_connected_upd:"Google Calendar conectado",cal_unavail:"La conexión de calendario no está disponible en esta versión de ELIA. Por ahora, elige el horario que mejor te acomode.",cal_none_free:"No encontré un espacio libre de {min} minutos a esa hora del día esta semana.",cal_which:"¿Qué hora del día te acomoda mejor?",
+  cal_prop_t:"Esto cabe en tu semana",cal_prop_sub:"Horarios libres en tu Google Calendar ({email}). Cada uno se repite cada semana durante 4 semanas.",cal_fewer:"Solo hay {n} espacios libres esta semana a esa hora.",cal_add:"Agregar a mi calendario",cal_other:"Otros horarios",cal_notnow:"Ahora no",cal_skip:"Sin problema. Elige el horario que te acomode y lo recordaré.",
+  cal_added:"Agregué {n} sesiones a tu Google Calendar, con un recordatorio 10 minutos antes de cada una.",cal_added_upd:"{n} sesiones agregadas a Google Calendar",cal_open:"Abrir",cal_partial:"{n} no se pudieron agregar.",cal_expired:"Tu conexión con Google Calendar expiró. Toca Conectar Google Calendar para reconectar.",cal_err:"Google Calendar no lo aceptó, así que no se agregó nada. Puedes intentarlo de nuevo o elegir un horario.",cal_desc:"Planeado con ELIA de Prime Health. Escríbele a ELIA para cambiarlo."});
+Object.assign(L.ar,{cal_btn:"ربط تقويم Google",cal_opening:"جارٍ فتح تسجيل الدخول إلى Google في نافذة جديدة. اختر حسابك واسمح لـ ELIA برؤية أوقات فراغك وإضافة مواعيد.",cal_popup_blocked:"منع المتصفح نافذة تسجيل الدخول. اسمح بالنوافذ المنبثقة لهذا الموقع ثم اضغط ربط تقويم Google مرة أخرى.",cal_failed:"لم يتم ربط تقويم Google. يمكنك المحاولة مرة أخرى أو اختيار وقت.",cal_timeout:"لم يصلني رد من Google. يمكنك المحاولة مرة أخرى أو اختيار وقت.",
+  cal_connected:"تم الربط بتقويم Google ({email}). دعني أنظر إلى أسبوعك…",cal_connected_upd:"تم ربط تقويم Google",cal_unavail:"ربط التقويم غير متاح في هذه النسخة من ELIA. اختر الآن الوقت الأنسب لك.",cal_none_free:"لم أجد وقتًا فارغًا مدته {min} دقيقة في هذا الوقت من اليوم هذا الأسبوع.",cal_which:"أي وقت من اليوم يناسبك أكثر؟",
+  cal_prop_t:"هذا ما يناسب أسبوعك",cal_prop_sub:"أوقات فراغ في تقويم Google ({email}). كل موعد يتكرر أسبوعيًا لمدة 4 أسابيع.",cal_fewer:"يوجد {n} أوقات فارغة فقط هذا الأسبوع في هذا الوقت من اليوم.",cal_add:"أضف إلى تقويمي",cal_other:"أوقات أخرى",cal_notnow:"ليس الآن",cal_skip:"لا مشكلة. اختر الوقت المناسب وسأتذكره.",
+  cal_added:"أضفت {n} جلسات إلى تقويم Google، مع تذكير قبل كل جلسة بعشر دقائق.",cal_added_upd:"أُضيفت {n} جلسات إلى تقويم Google",cal_open:"فتح",cal_partial:"تعذرت إضافة {n}.",cal_expired:"انتهت صلاحية الربط بتقويم Google. اضغط ربط تقويم Google لإعادة الربط.",cal_err:"لم يقبل تقويم Google ذلك، لذلك لم تتم إضافة شيء. يمكنك المحاولة مرة أخرى أو اختيار وقت.",cal_desc:"خُطط مع ELIA من Prime Health. راسل ELIA لتغييره."});
 /* ============ Voice notes: record, send, transcribe ============ */
 let vrec=null;
 function vnBar(){let b=$("#vnBar");if(b)return b;b=document.createElement("div");b.id="vnBar";b.className="vnbar";b.hidden=true;
@@ -2409,8 +2485,8 @@ function proposeMove(){const a=getAct("move");a.activity=S.activity;a.min=Math.m
   addFile({id:"move",type:"move",title:()=>t("file_move"),body:moveHTML,link:"move"});
   replies([[t("try_snack"),snack],[t("pick_time"),askSlot]])}
 function getAct(id){return S.plan&&S.plan.actions.find(a=>a.id===id)}
-function askSlot(){bot(t("ask_slot",{tz:TZ}));replies([["am","slot_am"],["noon","slot_noon"],["pm","slot_pm"]].map(([v,k])=>[t(k),()=>{S.slot=k;const a=getAct("move");a.slot=k;renderHQ();bot(t("scheduled",{title:actTitle(a),slot:t(k).toLowerCase()}));afterMove()}]).concat([[t("cal_btn"),()=>{bot(`<span class="ph">${t("ph_cal")}</span><p>${t("cal_ph")}</p>`);askSlotAgain()}]]))}
-function askSlotAgain(){replies([["am","slot_am"],["noon","slot_noon"],["pm","slot_pm"]].map(([v,k])=>[t(k),()=>{S.slot=k;const a=getAct("move");a.slot=k;renderHQ();bot(t("scheduled",{title:actTitle(a),slot:t(k).toLowerCase()}));afterMove()}]))}
+function askSlot(){bot(t("ask_slot",{tz:TZ}));replies([["am","slot_am"],["noon","slot_noon"],["pm","slot_pm"]].map(([v,k])=>[t(k),()=>{S.slot=k;const a=getAct("move");a.slot=k;renderHQ();bot(t("scheduled",{title:actTitle(a),slot:t(k).toLowerCase()}));afterMove()}]).concat([[t("cal_btn"),calConnect]]))}
+function askSlotAgain(withCal){replies([["am","slot_am"],["noon","slot_noon"],["pm","slot_pm"]].map(([v,k])=>[t(k),()=>{S.slot=k;const a=getAct("move");a.slot=k;renderHQ();bot(t("scheduled",{title:actTitle(a),slot:t(k).toLowerCase()}));afterMove()}]).concat(withCal?[[t("cal_btn"),calConnect]]:[]))}
 function snack(){const gentle=S.injury==="knee"||S.injury==="back"||S.gentle;const ex=gentle?t("ex_seated"):t("ex_march");const id="tm"+Date.now();
   bot(`<div class="card" id="${id}"><div class="card-h"><span class="eyebrow">${t("snack_title")}</span><span class="ph">${t("ph_rules")}</span></div><div class="timer"><svg class="ring" viewBox="0 0 64 64"><circle class="bg" cx="32" cy="32" r="27"/><circle class="fg" cx="32" cy="32" r="27" stroke-dasharray="169.6" stroke-dashoffset="0" transform="rotate(-90 32 32)"/><text x="32" y="38" text-anchor="middle">30</text></svg><div><p style="margin:0 0 6px"><b>${ex}</b></p><button class="btn" data-timer="${id}">${t("start")}</button></div></div></div>`,{cls:"wide"})}
 msgsEl.addEventListener("click",e=>{const b=e.target.closest("[data-timer]");if(!b)return;b.disabled=true;const card=document.getElementById(b.dataset.timer),fg=card.querySelector(".fg"),tx=card.querySelector("text");let s=30;

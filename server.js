@@ -29,15 +29,17 @@ const ISOLATION = {
   "Referrer-Policy": "strict-origin-when-cross-origin",
 };
 
-// Light abuse protection for the token endpoint: 20 tokens per IP per hour.
-const hits = new Map();
-function allowed(ip) {
-  const now = Date.now(), win = 3600_000, list = (hits.get(ip) || []).filter((t) => now - t < win);
-  if (list.length >= 20) { hits.set(ip, list); return false; }
-  list.push(now); hits.set(ip, list);
-  if (hits.size > 5000) for (const [k, v] of hits) if (!v.some((t) => now - t < win)) hits.delete(k);
+// Light abuse protection: per-IP hourly limits per endpoint (tokens 20, Claude 60, Google 120).
+const buckets = new Map();
+function allowed(ip, name = "dfx", limit = 20) {
+  const key = name + "|" + ip, now = Date.now(), win = 3600_000, list = (buckets.get(key) || []).filter((t) => now - t < win);
+  if (list.length >= limit) { buckets.set(key, list); return false; }
+  list.push(now); buckets.set(key, list);
+  if (buckets.size > 20000) for (const [k, v] of buckets) if (!v.some((t) => now - t < win)) buckets.delete(k);
   return true;
 }
+const clientIp = (req) => (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
+const sameOrigin = (req) => { const o = req.headers.origin; return !o || o === `https://${req.headers.host}` || o === `http://${req.headers.host}`; };
 
 function send(res, status, body, headers = {}) {
   const isObj = typeof body === "object" && !Buffer.isBuffer(body);
@@ -63,10 +65,8 @@ async function readJson(req, max = 4096) {
 async function issueToken(req, res) {
   if (!ENABLED) return send(res, 503, { error: "not_configured" });
   // Only this site's own pages may request tokens.
-  const origin = req.headers.origin;
-  if (origin && origin !== `https://${req.headers.host}` && origin !== `http://${req.headers.host}`) return send(res, 403, { error: "origin" });
-  const ip = (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
-  if (!allowed(ip)) return send(res, 429, { error: "rate_limited" });
+  if (!sameOrigin(req)) return send(res, 403, { error: "origin" });
+  if (!allowed(clientIp(req), "dfx", 20)) return send(res, 429, { error: "rate_limited" });
   let body = {};
   try { body = await readJson(req); } catch { return send(res, 400, { error: "bad_request" }); }
   const id = String(body.id || "").replace(/[^a-zA-Z0-9-]/g, "").slice(0, 64) || crypto.randomUUID();
@@ -92,6 +92,120 @@ async function issueToken(req, res) {
   }
 }
 
+
+/* ───────────── Claude (photo recognition, meal estimates, record Q&A) ─────────────
+   The page uses Claude through the artifact runtime inside Claude; here it calls this endpoint instead.
+   The Anthropic key stays on the server (ANTHROPIC_API_KEY). */
+const AI_KEY = (process.env.ANTHROPIC_API_KEY || "").trim();
+const AI_MODELS = { quick: process.env.AI_MODEL_QUICK || "claude-haiku-5-5", default: process.env.AI_MODEL_DEFAULT || "claude-sonnet-5-5", complex: process.env.AI_MODEL_DEFAULT || "claude-sonnet-5-5" };
+const AI_SYSTEM = "You are part of ELIA, Prime Health's health coaching app. Follow the instructions in the user's message exactly, including any requested output format. You give wellness guidance, not diagnosis.";
+async function aiCall(req, res) {
+  if (!AI_KEY) return send(res, 503, { error: "not_configured" });
+  if (!sameOrigin(req)) return send(res, 403, { error: "origin" });
+  if (!allowed(clientIp(req), "ai", 60)) return send(res, 429, { error: "rate_limited" });
+  let body;
+  try { body = await readJson(req, 12 * 1024 * 1024); } catch { return send(res, 413, { error: "too_large" }); }
+  let messages = typeof body.input === "string" ? [{ role: "user", content: body.input }] : Array.isArray(body.input) ? body.input : null;
+  if (!messages || !messages.length) return send(res, 400, { error: "bad_request" });
+  messages = messages.slice(-14).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "").slice(0, 60000) }));
+  // merge consecutive turns from the same side
+  const merged = [];
+  for (const m of messages) { const last = merged[merged.length - 1]; if (last && last.role === m.role) last.content += "\n\n" + m.content; else merged.push({ ...m }); }
+  if (merged[0].role !== "user") merged.unshift({ role: "user", content: "(conversation continues)" });
+  const images = (Array.isArray(body.images) ? body.images : []).slice(0, 3).filter((i) => i && /^image\/(jpeg|png|webp|gif)$/.test(i.media_type) && typeof i.data === "string" && i.data.length < 6_000_000);
+  const lastUser = merged[merged.length - 1];
+  if (images.length) lastUser.content = [...images.map((i) => ({ type: "image", source: { type: "base64", media_type: i.media_type, data: i.data } })), { type: "text", text: lastUser.content }];
+  try {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": AI_KEY, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model: AI_MODELS[body.tier] || AI_MODELS.default, max_tokens: 1500, system: AI_SYSTEM, messages: merged }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { console.error("Claude API error", r.status, j.error && j.error.type); return send(res, r.status === 429 ? 429 : 502, { error: r.status === 429 ? "rate_limited" : "upstream" }); }
+    const text = (j.content || []).filter((c) => c.type === "text").map((c) => c.text).join("");
+    return send(res, 200, { text, truncated: j.stop_reason === "max_tokens" });
+  } catch (e) { console.error("Claude API unreachable", e.message); return send(res, 502, { error: "unreachable" }); }
+}
+
+/* ───────────── Google Calendar (server-side OAuth; works with cross-origin isolation) ─────────────
+   1. The page opens /api/google/auth?sid=… in a popup; Google redirects back to /api/google/callback.
+   2. The server exchanges the code (client secret stays here) and keeps the token in memory for that sid.
+   3. The popup tells the page over a same-origin BroadcastChannel and closes.
+   4. The page asks the server for free/busy times and to create events. */
+const G_ID = (process.env.GOOGLE_CLIENT_ID || "").trim(), G_SECRET = (process.env.GOOGLE_CLIENT_SECRET || "").trim();
+const G_SCOPES = ["openid", "email", "https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/calendar.freebusy"];
+const gSessions = new Map(); // sid -> { token, exp, email }
+const validSid = (sid) => /^[a-zA-Z0-9-]{20,64}$/.test(sid || "");
+const redirectUri = (req) => `${req.headers["x-forwarded-proto"] || (req.socket.encrypted ? "https" : "http")}://${req.headers.host}/api/google/callback`;
+function gSweep() { const now = Date.now(); for (const [k, v] of gSessions) if (v.exp < now) gSessions.delete(k); }
+function googleAuth(req, res, q) {
+  if (!G_ID || !G_SECRET) return send(res, 503, "Google Calendar isn't configured on this server.");
+  const sid = q.get("sid");
+  if (!validSid(sid)) return send(res, 400, "Bad request");
+  const u = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+  u.search = new URLSearchParams({ client_id: G_ID, redirect_uri: redirectUri(req), response_type: "code", scope: G_SCOPES.join(" "), state: sid, access_type: "online", include_granted_scopes: "true", prompt: "select_account" }).toString();
+  res.writeHead(302, { Location: u.toString(), "Cache-Control": "no-store" }); res.end();
+}
+function popupPage(res, payload) {
+  const html = `<!doctype html><meta charset="utf-8"><title>ELIA · Google Calendar</title><style>body{font:15px system-ui,sans-serif;display:grid;place-items:center;height:100vh;margin:0;background:#0a2342;color:#fff;text-align:center}</style>
+<p>${payload.ok ? "Connected. You can close this window." : "Calendar connection didn't complete. You can close this window."}</p>
+<script>try{new BroadcastChannel("elia-google").postMessage(${JSON.stringify(payload)})}catch(e){}setTimeout(()=>window.close(),400)</script>`;
+  send(res, 200, html, { "Content-Type": "text/html; charset=utf-8" });
+}
+async function googleCallback(req, res, q) {
+  const sid = q.get("state"), code = q.get("code");
+  if (!validSid(sid)) return popupPage(res, { ok: false, sid: null, error: "state" });
+  if (q.get("error") || !code) return popupPage(res, { ok: false, sid, error: q.get("error") || "no_code" });
+  try {
+    const r = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ code, client_id: G_ID, client_secret: G_SECRET, redirect_uri: redirectUri(req), grant_type: "authorization_code" }) });
+    const j = await r.json();
+    if (!r.ok || !j.access_token) { console.error("Google token exchange failed", r.status, j.error); return popupPage(res, { ok: false, sid, error: j.error || "token" }); }
+    let email = null;
+    try { const u = await fetch("https://openidconnect.googleapis.com/v1/userinfo", { headers: { Authorization: `Bearer ${j.access_token}` } }); email = (await u.json()).email || null; } catch {}
+    const granted = String(j.scope || "");
+    gSweep(); gSessions.set(sid, { token: j.access_token, exp: Date.now() + Math.min(3500, j.expires_in || 3500) * 1000, email });
+    return popupPage(res, { ok: true, sid, email, events: granted.includes("calendar.events"), freebusy: granted.includes("calendar.freebusy") });
+  } catch (e) { console.error("Google unreachable", e.message); return popupPage(res, { ok: false, sid, error: "unreachable" }); }
+}
+async function googleApi(req, res, action) {
+  if (!sameOrigin(req)) return send(res, 403, { error: "origin" });
+  if (!allowed(clientIp(req), "google", 120)) return send(res, 429, { error: "rate_limited" });
+  let b; try { b = await readJson(req, 64 * 1024); } catch { return send(res, 400, { error: "bad_request" }); }
+  const s = validSid(b.sid) && gSessions.get(b.sid);
+  if (!s || s.exp < Date.now()) return send(res, 401, { error: "not_connected" });
+  const H = { Authorization: `Bearer ${s.token}`, "Content-Type": "application/json" };
+  try {
+    if (action === "freebusy") {
+      const r = await fetch("https://www.googleapis.com/calendar/v3/freeBusy", { method: "POST", headers: H, body: JSON.stringify({ timeMin: b.timeMin, timeMax: b.timeMax, timeZone: b.timeZone, items: [{ id: "primary" }] }) });
+      const j = await r.json();
+      if (!r.ok) return send(res, r.status === 401 ? 401 : 502, { error: "google", detail: j.error && j.error.message });
+      return send(res, 200, { busy: (j.calendars && j.calendars.primary && j.calendars.primary.busy) || [], email: s.email });
+    }
+    if (action === "events") {
+      const e = b.event || {};
+      const ev = {
+        summary: String(e.summary || "ELIA").slice(0, 200), description: String(e.description || "").slice(0, 2000),
+        start: { dateTime: e.start, timeZone: b.timeZone }, end: { dateTime: e.end, timeZone: b.timeZone },
+        recurrence: Array.isArray(e.recurrence) ? e.recurrence.slice(0, 2).map(String) : undefined,
+        reminders: { useDefault: false, overrides: [{ method: "popup", minutes: 10 }] },
+        source: { title: "ELIA by Prime Health", url: `https://${req.headers.host}/` },
+      };
+      const r = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", { method: "POST", headers: H, body: JSON.stringify(ev) });
+      const j = await r.json();
+      if (!r.ok) return send(res, r.status === 401 ? 401 : 502, { error: "google", detail: j.error && j.error.message });
+      return send(res, 200, { id: j.id, htmlLink: j.htmlLink });
+    }
+    if (action === "disconnect") {
+      gSessions.delete(b.sid);
+      fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(s.token)}`, { method: "POST" }).catch(() => {});
+      return send(res, 200, { ok: true });
+    }
+    return send(res, 404, { error: "unknown" });
+  } catch (e) { console.error("Google API", e.message); return send(res, 502, { error: "unreachable" }); }
+}
+
 async function serveFile(req, res, urlPath) {
   let p = decodeURIComponent(urlPath.split("?")[0]);
   if (p.endsWith("/")) p += "index.html";
@@ -113,9 +227,15 @@ async function serveFile(req, res, urlPath) {
 const server = http.createServer(async (req, res) => {
   const url = req.url || "/";
   if (url === "/healthz") return send(res, 200, { ok: true });
-  if (url === "/api/dfx/config" && req.method === "GET") return send(res, 200, { enabled: ENABLED });
-  if (url === "/api/dfx/token" && req.method === "POST") return issueToken(req, res);
+  const u = new URL(url, "http://x"), p = u.pathname;
+  if (p === "/api/dfx/config" && req.method === "GET") return send(res, 200, { enabled: ENABLED });
+  if (p === "/api/dfx/token" && req.method === "POST") return issueToken(req, res);
+  if (p === "/api/config" && req.method === "GET") return send(res, 200, { dfx: ENABLED, ai: Boolean(AI_KEY), google: Boolean(G_ID && G_SECRET) });
+  if (p === "/api/ai" && req.method === "POST") return aiCall(req, res);
+  if (p === "/api/google/auth" && req.method === "GET") return googleAuth(req, res, u.searchParams);
+  if (p === "/api/google/callback" && req.method === "GET") return googleCallback(req, res, u.searchParams);
+  if (p.startsWith("/api/google/") && req.method === "POST") return googleApi(req, res, p.slice("/api/google/".length));
   if (req.method !== "GET" && req.method !== "HEAD") return send(res, 405, "Method not allowed");
   return serveFile(req, res, url);
 });
-server.listen(PORT, () => console.log(`ELIA demo on :${PORT} · DeepAffex ${ENABLED ? "enabled" : "not configured (set DFX_LICENSE_KEY and DFX_STUDY_ID)"} · API ${API_URL}`));
+server.listen(PORT, () => console.log(`ELIA demo on :${PORT} · DeepAffex ${ENABLED ? "enabled" : "not configured (set DFX_LICENSE_KEY and DFX_STUDY_ID)"} · API ${API_URL} · Claude ${AI_KEY ? "enabled" : "not configured (ANTHROPIC_API_KEY)"} · Google Calendar ${G_ID && G_SECRET ? "enabled" : "not configured (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)"}`));
