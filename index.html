@@ -1850,7 +1850,7 @@ function vnBar(){let b=$("#vnBar");if(b)return b;b=document.createElement("div")
   $("#composer").before(b);b.addEventListener("click",e=>{const a=e.target.closest("[data-vn]");if(a)a.dataset.vn==="send"?vnStop(true):vnStop(false)});return b}
 const VN_MOBILE=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
 /* Buttons to offer again after a voice note that couldn't be used, so the member can carry on */
-function reofferMedia(){if(S.await==="meal")replies([[t("btn_photo"),()=>$("#photoIn").click(),{silent:true}],[t("btn_voice"),()=>voice(),{silent:true}]]);
+function reofferMedia(){if(S.curReplies){restorePrompt();return}if(S.await==="meal")replies([[t("btn_photo"),()=>$("#photoIn").click(),{silent:true}],[t("btn_voice"),()=>voice(),{silent:true}]]);
   else if(S.await==="ing")replies([[t("btn_photo"),()=>{S.photoFor="ing";$("#photoIn").click()},{silent:true}],[t("btn_voice"),()=>voice(),{silent:true}]])}
 async function voice(){if(vrec)return;clearReplies();
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -2068,18 +2068,23 @@ function bot(html,o={}){const g=gen;later(()=>new Promise(r=>{const ty=add("typi
 function sys(html,cls="sys"){later(()=>{add(cls,html)})}
 function user(html){return add("me",html)}
 function replies(list){later(()=>setReplies(list))}
-function setReplies(list){repEl.innerHTML="";list.forEach(([label,fn,opts={}])=>{const b=document.createElement("button");b.type="button";b.textContent=label;b.onclick=()=>{clearReplies();if(!opts.silent){const el=user(esc(label));maybeReact(el,label,opts.react||null)}fn()};repEl.appendChild(b)})}
+function setReplies(list){repEl.innerHTML="";S.curReplies=list;list.forEach(([label,fn,opts={}])=>{const b=document.createElement("button");b.type="button";b.textContent=label;b.onclick=()=>{clearReplies();S.curReplies=null;if(!opts.silent){const el=user(esc(label));maybeReact(el,label,opts.react||null)}fn()};repEl.appendChild(b)})}
 function clearReplies(){repEl.innerHTML=""}
+/* After anything off-script (a question, a language switch, an unclear reply, a voice note with no words),
+   bring the member back to the open question: ask it again if it was typed, and restore its buttons. */
+const REASK={age:"ask_age",hw:"ask_hw",meal:"ask_meal",allergy:"ask_allergy",ing:"ask_ing",injury:"ask_inj_other"};
+function restorePrompt(){later(()=>{if(!repEl.children.length&&S.curReplies)setReplies(S.curReplies)})}
+function reprompt(){if(S.coreDone&&!S.await){coreReplies();return}const ask={age:askAge,hw:askHW,meal:askMeal,ing:askIng}[S.await];if(ask){clearReplies();S.curReplies=null;ask();return}const k=REASK[S.await];if(k)bot(t(k));restorePrompt()}
 function run(fn){later(()=>{fn()})}
 
 /* ============ Flow ============ */
 function start(){
-  setSimHeader(false);gen++;chain=Promise.resolve();msgsEl.innerHTML="";clearReplies();
+  S.langChosen=false;setSimHeader(false);gen++;chain=Promise.resolve();msgsEl.innerHTML="";clearReplies();
   sys(new Date().toLocaleDateString(LOCALE[S.lang],{weekday:"long",month:"long",day:"numeric"}));
   bot(`<p>Hi, I'm <b>ELIA</b>, an AI health assistant from Prime Health.</p><p>Choose your language · Elige tu idioma · <span lang="ar" dir="rtl">اختر لغتك</span></p>`,{delay:500});
   replies([["English",()=>chooseLang("en")],["Español",()=>chooseLang("es")],["العربية",()=>chooseLang("ar")]]);
 }
-function chooseLang(l){setLang(l);setFact("lang",{fn:()=>t("lang_name")},"src_chat","cf_conf");setFact("tz",TZ,"src_device","cf_unconf");setFact("rx",{k:"rx_"+S.rx.pref},"src_default","cf_conf");
+function chooseLang(l){S.langChosen=true;setLang(l);setFact("lang",{fn:()=>t("lang_name")},"src_chat","cf_conf");setFact("tz",TZ,"src_device","cf_unconf");setFact("rx",{k:"rx_"+S.rx.pref},"src_default","cf_conf");
   bot(`<p>${t("intro")}</p><p class="note">${t("privacy")}</p>`);askName()}
 function askName(){bot(t("ask_name"));run(()=>S.await="name")}
 function onName(x){S.await=null;S.name=x.trim().split(/\s+/).slice(0,3).join(" ").slice(0,40);setFact("name",S.name,"src_chat","cf_conf");askGoal()}
@@ -2356,25 +2361,28 @@ function route(x,el){
   const sens=rxSensitive(x),off=RX_OFF.test(x),on=!off&&RX_ON.test(x);
   const topic=(sens||off||on||isRecQuestion(x))?null:(S.await==="meal"?"meals":(S.await==null&&S.name?rxTopic(x):null));
   maybeReact(el,x,topic);
-  if(off){setRxPref("off","src_chat");bot(t("rx_off_msg"));if(S.coreDone)coreReplies();return}
-  if(on){setRxPref("on","src_chat");bot(t("rx_on_msg"));if(S.coreDone)coreReplies();return}
+  if(off){setRxPref("off","src_chat");bot(t("rx_off_msg"));reprompt();return}
+  if(on){setRxPref("on","src_chat");bot(t("rx_on_msg"));reprompt();return}
   /* Questions about the member's own record are answered from it (emergencies still go to Sim first) */
-  if(!simEmergency(x)&&isRecQuestion(x)){S.record?recAsk(x):recOffer();return}
+  if(!simEmergency(x)&&isRecQuestion(x)){S.record?recAsk(x):recOffer();restorePrompt();return}
   /* A symptom or emergency at any point in the conversation brings in Sim; ELIA resumes afterward */
   if(HAS_SIM&&(simEmergency(x)||detectSymptom(x)==="sim")){startSim(x);return}
   if(SAFE_RE.test(x)){safety();return}
   if(detectSymptom(x)==="pick"){pickSymptom();return}
   const sw=/\b(espa[nñ]ol|spanish)\b/i.test(x)?"es":/(arabic|عربي|العربية)/i.test(x)?"ar":/\b(english|ingl[eé]s)\b|الإنجليزية/i.test(x)?"en":null;
-  if(sw&&S.await!=="name"&&S.lang){if(sw!==S.lang){setLang(sw)}bot(t("switched"));if(!S.await&&S.coreDone)coreReplies();return}
+  /* At the very first question, saying or typing a language picks it */
+  if(sw&&!S.langChosen){clearReplies();S.curReplies=null;chooseLang(sw);return}
+  if(sw&&S.await!=="name"&&S.lang){if(sw!==S.lang){setLang(sw)}bot(t("switched"));reprompt();return}
   const tm=x.match(/(\d{1,2})\s*(min|minutes|minutos|دقائق|دقيقة)/i);
   if(tm&&S.plan&&S.plan.status==="accepted"&&!["age","hw"].includes(S.await)){adapt(+tm[1],"chat");if(S.coreDone)coreReplies();return}
   if(/\b(recap|resumen|summary)\b|ملخص/i.test(x)&&S.plan){recap();return}
+  if(REASK[S.await]||S.await==="name")S.curReplies=null;
   switch(S.await){
     case"name":return onName(x);case"age":return onAge(x);case"hw":return onHW(x);case"meal":return mealFromText(x);case"allergy":return onAllergy(x);case"injury":return onInjury(x);case"ing":return onIng(x);
   }
-  if(sens){bot(t("r_"+sens));if(S.coreDone)coreReplies();return}
-  if(topic){topicReply(topic);return}
-  bot(t("fallback"))}
+  if(sens){bot(t("r_"+sens));reprompt();return}
+  if(topic){topicReply(topic);if(!S.coreDone)restorePrompt();return}
+  bot(t("fallback"));reprompt()}
 
 /* ============ HQ ============ */
 const hqMain=$("#hqMain");
