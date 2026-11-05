@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: elia-demo
+    runtime: static
+    buildCommand: echo "static site"
+    staticPublishPath: .
+    headers:
+      - path: /*
+        name: Permissions-Policy
+        value: camera=(self), microphone=(self)
+      - path: /*
+        name: Cache-Control
+        value: no-cache
