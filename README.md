@@ -64,3 +64,8 @@ If DeepAffex isn't configured or reachable, ELIA offers its on-device camera sca
 npm ci && npm run build
 DFX_LICENSE_KEY=... DFX_STUDY_ID=... npm start   # http://localhost:10000
 ```
+
+## Voice mode (Cartesia)
+Set `CARTESIA_API_KEY` on the web service. Voice mode then reads ELIA's messages with Cartesia Sonic (`sonic-3.6`) through `POST /api/tts`; the key never reaches the browser. Without it, the page uses the browser's built-in voice.
+
+Optional: `CARTESIA_VOICE_ID` (ELIA's voice, default Skylar `db6b0ed5-d5d3-463d-ae85-518a07d3c2b4`), `CARTESIA_VOICE_ID_ES` / `CARTESIA_VOICE_ID_AR` (a different voice per language), `CARTESIA_VOICE_ID_SIM` (Sim, default Daniel), `CARTESIA_MODEL`, `CARTESIA_VERSION` (default `2026-08-14`). Limit: 400 requests per IP per hour.

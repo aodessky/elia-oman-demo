@@ -20,6 +20,8 @@ services:
         sync: false
       - key: GOOGLE_CLIENT_SECRET
         sync: false
+      - key: CARTESIA_API_KEY
+        sync: false
       - key: NODE_VERSION
         value: "22"
   # Static copy of the same page (on-device scan only)

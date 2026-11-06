@@ -224,18 +224,52 @@ async function serveFile(req, res, urlPath) {
   }
 }
 
+/* ───────────── Voice (Cartesia text-to-speech) ─────────────
+   Voice mode reads ELIA's messages aloud with a Cartesia Sonic voice. The key stays here (CARTESIA_API_KEY);
+   the page falls back to the browser's own voice when this isn't configured. */
+const TTS_KEY = (process.env.CARTESIA_API_KEY || "").trim();
+const TTS_MODEL = process.env.CARTESIA_MODEL || "sonic-3.6";
+const TTS_VERSION = process.env.CARTESIA_VERSION || "2026-08-14";
+// Defaults are Cartesia's recommended voices for agents: Skylar (female, en-US) for ELIA, Daniel (male, en-US) for Sim.
+const TTS_VOICES = { elia: process.env.CARTESIA_VOICE_ID || "db6b0ed5-d5d3-463d-ae85-518a07d3c2b4", sim: process.env.CARTESIA_VOICE_ID_SIM || "47c38ca4-5f35-497b-b1a3-415245fb35e1" };
+async function ttsCall(req, res) {
+  if (!TTS_KEY) return send(res, 503, { error: "not_configured" });
+  if (!sameOrigin(req)) return send(res, 403, { error: "origin" });
+  if (!allowed(clientIp(req), "tts", 400)) return send(res, 429, { error: "rate_limited" });
+  let b;
+  try { b = await readJson(req, 16 * 1024); } catch { return send(res, 400, { error: "bad_request" }); }
+  const text = String(b.text || "").replace(/\s+/g, " ").trim().slice(0, 900);
+  if (!text) return send(res, 400, { error: "bad_request" });
+  const lang = ["en", "es", "ar"].includes(b.lang) ? b.lang : "en";
+  const who = b.who === "sim" ? "sim" : "elia";
+  // A different voice per language is optional (CARTESIA_VOICE_ID_ES, CARTESIA_VOICE_ID_AR); otherwise the same voice speaks every language.
+  const voice = (who === "elia" && process.env["CARTESIA_VOICE_ID_" + lang.toUpperCase()]) || TTS_VOICES[who];
+  try {
+    const r = await fetch("https://api.cartesia.ai/tts/bytes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Cartesia-Version": TTS_VERSION, Authorization: `Bearer ${TTS_KEY}`, "X-API-Key": TTS_KEY },
+      body: JSON.stringify({ model_id: TTS_MODEL, transcript: text, voice: { mode: "id", id: voice }, language: lang,
+        output_format: { container: "mp3", sample_rate: 44100, bit_rate: 128000 }, generation_config: { speed: 1.0, volume: 1.0 } }),
+    });
+    if (!r.ok) { const e = await r.text().catch(() => ""); console.error("Cartesia error", r.status, e.slice(0, 300)); return send(res, r.status === 429 ? 429 : 502, { error: "upstream", status: r.status }); }
+    const audio = Buffer.from(await r.arrayBuffer());
+    return send(res, 200, audio, { "Content-Type": "audio/mpeg" });
+  } catch (e) { console.error("Cartesia unreachable", e.message); return send(res, 502, { error: "unreachable" }); }
+}
+
 const server = http.createServer(async (req, res) => {
   const url = req.url || "/";
   if (url === "/healthz") return send(res, 200, { ok: true });
   const u = new URL(url, "http://x"), p = u.pathname;
   if (p === "/api/dfx/config" && req.method === "GET") return send(res, 200, { enabled: ENABLED });
   if (p === "/api/dfx/token" && req.method === "POST") return issueToken(req, res);
-  if (p === "/api/config" && req.method === "GET") return send(res, 200, { dfx: ENABLED, ai: Boolean(AI_KEY), google: Boolean(G_ID && G_SECRET) });
+  if (p === "/api/config" && req.method === "GET") return send(res, 200, { dfx: ENABLED, ai: Boolean(AI_KEY), google: Boolean(G_ID && G_SECRET), tts: Boolean(TTS_KEY) });
   if (p === "/api/ai" && req.method === "POST") return aiCall(req, res);
+  if (p === "/api/tts" && req.method === "POST") return ttsCall(req, res);
   if (p === "/api/google/auth" && req.method === "GET") return googleAuth(req, res, u.searchParams);
   if (p === "/api/google/callback" && req.method === "GET") return googleCallback(req, res, u.searchParams);
   if (p.startsWith("/api/google/") && req.method === "POST") return googleApi(req, res, p.slice("/api/google/".length));
   if (req.method !== "GET" && req.method !== "HEAD") return send(res, 405, "Method not allowed");
   return serveFile(req, res, url);
 });
-server.listen(PORT, () => console.log(`ELIA demo on :${PORT} · DeepAffex ${ENABLED ? "enabled" : "not configured (set DFX_LICENSE_KEY and DFX_STUDY_ID)"} · API ${API_URL} · Claude ${AI_KEY ? "enabled" : "not configured (ANTHROPIC_API_KEY)"} · Google Calendar ${G_ID && G_SECRET ? "enabled" : "not configured (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)"}`));
+server.listen(PORT, () => console.log(`ELIA demo on :${PORT} · DeepAffex ${ENABLED ? "enabled" : "not configured (set DFX_LICENSE_KEY and DFX_STUDY_ID)"} · API ${API_URL} · Claude ${AI_KEY ? "enabled" : "not configured (ANTHROPIC_API_KEY)"} · Google Calendar ${G_ID && G_SECRET ? "enabled" : "not configured (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)"} · Voice ${TTS_KEY ? "Cartesia " + TTS_MODEL : "browser (CARTESIA_API_KEY not set)"}`));
