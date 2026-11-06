@@ -4,12 +4,15 @@
   "private": true,
   "description": "ELIA by Prime Health: demo web app with NuraLogix DeepAffex face scan",
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "node build.mjs",
     "start": "node server.js"
   },
   "dependencies": {
+    "@daily-co/daily-js": "0.94.0",
     "@nuralogix.ai/anura-web-core-sdk": "0.1.0-beta.24",
     "esbuild": "0.25.9"
   }

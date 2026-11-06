@@ -69,3 +69,11 @@ DFX_LICENSE_KEY=... DFX_STUDY_ID=... npm start   # http://localhost:10000
 Set `CARTESIA_API_KEY` on the web service. Voice mode then reads ELIA's messages with Cartesia Sonic (`sonic-3.6`) through `POST /api/tts`; the key never reaches the browser. Without it, the page uses the browser's built-in voice.
 
 Optional: `CARTESIA_VOICE_ID` (ELIA's voice, default Skylar `db6b0ed5-d5d3-463d-ae85-518a07d3c2b4`), `CARTESIA_VOICE_ID_ES` / `CARTESIA_VOICE_ID_AR` (a different voice per language), `CARTESIA_VOICE_ID_SIM` (Sim, default Daniel), `CARTESIA_MODEL`, `CARTESIA_VERSION` (default `2026-08-14`). Limit: 400 requests per IP per hour.
+
+## Talking avatar (Tavus)
+Set `TAVUS_API_KEY` on the web service. Voice mode then shows ELIA as a Tavus face that speaks ELIA's replies with lip sync.
+It uses Tavus echo mode: the page sends each reply as text (`conversation.echo`), so ELIA's own dialog stays in charge and the
+page keeps its own speech recognition. The server picks your own Tavus face whose name contains "Elia" (or `TAVUS_FACE_ID`),
+creates an echo-mode PAL once (or uses `TAVUS_PAL_ID`), voiced by the Cartesia voice when `CARTESIA_API_KEY` is set, and
+ends each conversation when voice mode closes (15-minute cap, 15 starts per IP per hour). Without the key, voice mode shows the animated orb.
+The page is served with `Cross-Origin-Embedder-Policy: credentialless` so it stays cross-origin isolated (NuraLogix SDK) while loading the Daily call library.

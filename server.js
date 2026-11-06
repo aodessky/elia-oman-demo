@@ -22,7 +22,9 @@ const TYPES = {
 };
 const ISOLATION = {
   "Cross-Origin-Opener-Policy": "same-origin",
-  "Cross-Origin-Embedder-Policy": "require-corp",
+  // credentialless (not require-corp): the page stays cross-origin isolated for the NuraLogix SDK in Chrome, Edge and Firefox,
+  // and can still load the Tavus/Daily video call library, which doesn't send CORP headers.
+  "Cross-Origin-Embedder-Policy": "credentialless",
   "Cross-Origin-Resource-Policy": "same-origin",
   "Permissions-Policy": "camera=(self), microphone=(self)",
   "X-Content-Type-Options": "nosniff",
@@ -257,19 +259,80 @@ async function ttsCall(req, res) {
   } catch (e) { console.error("Cartesia unreachable", e.message); return send(res, 502, { error: "unreachable" }); }
 }
 
+/* ───────────── Talking avatar (Tavus, echo mode) ─────────────
+   Voice mode shows ELIA as a Tavus face that speaks ELIA's own replies with lip sync. Echo mode means Tavus doesn't run its
+   own LLM or speech recognition: the page sends each reply as text (conversation.echo) and ELIA keeps the conversation.
+   TAVUS_API_KEY stays here. The face is TAVUS_FACE_ID, or the account's own face whose name contains "Elia". */
+const TAVUS_KEY = (process.env.TAVUS_API_KEY || "").trim();
+const TAVUS_API = "https://tavusapi.com/v2";
+const tavusHeaders = () => ({ "Content-Type": "application/json", "x-api-key": TAVUS_KEY });
+let tavusFace = process.env.TAVUS_FACE_ID || null, tavusFaceName = null, tavusPal = process.env.TAVUS_PAL_ID || null;
+const tavusConvs = new Set();
+async function tavusSetup() {
+  if (!tavusFace) {
+    const r = await fetch(`${TAVUS_API}/faces?face_type=user&limit=100&verbose=true`, { headers: tavusHeaders() });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(`faces ${r.status} ${j.message || ""}`);
+    const ok = (j.data || []).filter((f) => f.status === "completed" || f.status === "ready" || !f.status);
+    const f = ok.find((x) => /elia/i.test(x.face_name || "")) || ok[0];
+    if (!f) throw new Error("no_face");
+    tavusFace = f.face_id; tavusFaceName = f.face_name;
+    console.log(`Tavus face: ${tavusFaceName} (${tavusFace})`);
+  }
+  if (!tavusPal) {
+    // Echo mode, voiced by the same Cartesia voice as the rest of ELIA when a Cartesia key is set; otherwise the face's own voice.
+    const base = { pal_name: "ELIA (echo)", pipeline_mode: "echo", default_face_id: tavusFace };
+    const tries = TTS_KEY ? [{ ...base, layers: { tts: { tts_engine: "cartesia", api_key: TTS_KEY, external_voice_id: TTS_VOICES.elia } } }, base] : [base];
+    let last = "";
+    for (const body of tries) {
+      const r = await fetch(`${TAVUS_API}/pals`, { method: "POST", headers: tavusHeaders(), body: JSON.stringify(body) });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && (j.pal_id || j.persona_id)) { tavusPal = j.pal_id || j.persona_id; console.log(`Tavus echo PAL ${tavusPal}${body.layers ? " with Cartesia voice" : ""}`); break; }
+      last = `${r.status} ${j.message || j.error || ""}`;
+    }
+    if (!tavusPal) throw new Error("pal " + last);
+  }
+}
+async function tavusStart(req, res) {
+  if (!TAVUS_KEY) return send(res, 503, { error: "not_configured" });
+  if (!sameOrigin(req)) return send(res, 403, { error: "origin" });
+  if (!allowed(clientIp(req), "tavus", 15)) return send(res, 429, { error: "rate_limited" });
+  try {
+    await tavusSetup();
+    const r = await fetch(`${TAVUS_API}/conversations`, { method: "POST", headers: tavusHeaders(), body: JSON.stringify({
+      face_id: tavusFace, pal_id: tavusPal, conversation_name: "ELIA voice mode",
+      properties: { max_call_duration: 900, participant_left_timeout: 5, participant_absent_timeout: 60 } }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.conversation_url) { console.error("Tavus conversation failed", r.status, j.message || j.error || ""); return send(res, 502, { error: "upstream", status: r.status }); }
+    tavusConvs.add(j.conversation_id);
+    return send(res, 200, { conversation_id: j.conversation_id, conversation_url: j.conversation_url, face: tavusFaceName });
+  } catch (e) { console.error("Tavus setup failed", e.message); return send(res, 502, { error: e.message === "no_face" ? "no_face" : "setup" }); }
+}
+async function tavusEnd(req, res) {
+  let b = {};
+  try { b = await readJson(req, 4096); } catch {}
+  const id = String(b.conversation_id || "");
+  if (!TAVUS_KEY || !tavusConvs.has(id)) return send(res, 200, { ok: true });
+  tavusConvs.delete(id);
+  try { await fetch(`${TAVUS_API}/conversations/${encodeURIComponent(id)}/end`, { method: "POST", headers: tavusHeaders() }); } catch {}
+  return send(res, 200, { ok: true });
+}
+
 const server = http.createServer(async (req, res) => {
   const url = req.url || "/";
   if (url === "/healthz") return send(res, 200, { ok: true });
   const u = new URL(url, "http://x"), p = u.pathname;
   if (p === "/api/dfx/config" && req.method === "GET") return send(res, 200, { enabled: ENABLED });
   if (p === "/api/dfx/token" && req.method === "POST") return issueToken(req, res);
-  if (p === "/api/config" && req.method === "GET") return send(res, 200, { dfx: ENABLED, ai: Boolean(AI_KEY), google: Boolean(G_ID && G_SECRET), tts: Boolean(TTS_KEY) });
+  if (p === "/api/config" && req.method === "GET") return send(res, 200, { dfx: ENABLED, ai: Boolean(AI_KEY), google: Boolean(G_ID && G_SECRET), tts: Boolean(TTS_KEY), tavus: Boolean(TAVUS_KEY) });
   if (p === "/api/ai" && req.method === "POST") return aiCall(req, res);
   if (p === "/api/tts" && req.method === "POST") return ttsCall(req, res);
+  if (p === "/api/tavus/start" && req.method === "POST") return tavusStart(req, res);
+  if (p === "/api/tavus/end" && req.method === "POST") return tavusEnd(req, res);
   if (p === "/api/google/auth" && req.method === "GET") return googleAuth(req, res, u.searchParams);
   if (p === "/api/google/callback" && req.method === "GET") return googleCallback(req, res, u.searchParams);
   if (p.startsWith("/api/google/") && req.method === "POST") return googleApi(req, res, p.slice("/api/google/".length));
   if (req.method !== "GET" && req.method !== "HEAD") return send(res, 405, "Method not allowed");
   return serveFile(req, res, url);
 });
-server.listen(PORT, () => console.log(`ELIA demo on :${PORT} · DeepAffex ${ENABLED ? "enabled" : "not configured (set DFX_LICENSE_KEY and DFX_STUDY_ID)"} · API ${API_URL} · Claude ${AI_KEY ? "enabled" : "not configured (ANTHROPIC_API_KEY)"} · Google Calendar ${G_ID && G_SECRET ? "enabled" : "not configured (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)"} · Voice ${TTS_KEY ? "Cartesia " + TTS_MODEL : "browser (CARTESIA_API_KEY not set)"}`));
+server.listen(PORT, () => console.log(`ELIA demo on :${PORT} · DeepAffex ${ENABLED ? "enabled" : "not configured (set DFX_LICENSE_KEY and DFX_STUDY_ID)"} · API ${API_URL} · Claude ${AI_KEY ? "enabled" : "not configured (ANTHROPIC_API_KEY)"} · Google Calendar ${G_ID && G_SECRET ? "enabled" : "not configured (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)"} · Voice ${TTS_KEY ? "Cartesia " + TTS_MODEL : "browser (CARTESIA_API_KEY not set)"} · Avatar ${TAVUS_KEY ? "Tavus" : "off (TAVUS_API_KEY not set)"}`));

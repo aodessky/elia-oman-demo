@@ -640,6 +640,16 @@ li.wc-scope{cursor:default}
 .avatar{width:42px;height:42px;background:none}
 .avatar img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
 
+/* Voice mode: Tavus talking avatar in place of the orb */
+.vm-av{display:none;position:relative;width:min(62vw,230px);aspect-ratio:3/4;border:0;padding:0;border-radius:28px;overflow:hidden;background:#05101c;cursor:pointer;box-shadow:0 18px 50px -12px rgba(0,0,0,.6),0 0 0 2px rgba(255,255,255,.12);transition:box-shadow .3s}
+.vm-av video{width:100%;height:100%;object-fit:cover;display:block}
+.vm.tv-on .vm-orb{display:none}.vm.tv-on .vm-av{display:block}
+.vm.tv-on[data-state="listening"] .vm-av{box-shadow:0 18px 50px -12px rgba(0,0,0,.6),0 0 0 3px var(--teal-bright)}
+.vm.tv-on.talking .vm-av{box-shadow:0 18px 50px -12px rgba(0,0,0,.6),0 0 0 3px rgba(255,255,255,.55)}
+.vm.tv-on[data-state="paused"] .vm-av video,.vm.tv-on[data-state="muted"] .vm-av video{filter:brightness(.8)}
+.vm-aud{display:none}
+
+.msg.me .pick{display:block;font-size:11.5px;color:var(--muted);margin-top:2px}
 /* Face scan (camera) */
 .modal.fs{padding:0;background:rgba(3,10,20,.84);z-index:30}
 .fs-box{width:min(420px,100vw);height:min(820px,100dvh);background:#08121f;color:#eaf2f8;border-radius:24px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 80px -20px rgba(0,0,0,.6)}
@@ -747,6 +757,7 @@ li.wc-scope{cursor:default}
 #btnVM{color:var(--teal)}
 </style>
 <script type="module" src="/dfx-scan.js"></script>
+<script type="module" src="/tavus.js"></script>
 </head>
 <body>
 <div id="app" dir="ltr" lang="en">
@@ -2314,7 +2325,7 @@ const VM_LANG={en:"en-US",es:"es-MX",ar:"ar-SA"};
 const VM_ORB='<span class="vm-core"></span><span class="vm-glow"></span>';
 function vmEl(){let v=document.getElementById("vm");if(v)return v;v=document.createElement("div");v.id="vm";v.className="vm";v.hidden=true;v.setAttribute("role","dialog");v.setAttribute("aria-label","Voice mode");
   v.innerHTML=`<div class="vm-top"><span class="vm-title"></span><span class="vm-state" role="status" aria-live="polite"></span><button type="button" class="vm-x" data-vm="close" aria-label="End voice mode">✕</button></div>
-  <div class="vm-mid"><button type="button" class="vm-orb" data-vm="orb">${VM_ORB}</button></div>
+  <div class="vm-mid"><button type="button" class="vm-orb" data-vm="orb">${VM_ORB}</button><button type="button" class="vm-av" data-vm="orb" aria-label="ELIA"><video playsinline autoplay muted></video></button><audio class="vm-aud" autoplay></audio></div>
   <div class="vm-cap"><div class="vm-bot"><span class="vm-who"></span><p></p></div><p class="vm-user" dir="auto"></p></div>
   <div class="vm-chips"></div>
   <div class="vm-nomic" hidden><b></b><p></p><div class="vm-na"><button type="button" class="btn" data-vm="tts"></button><button type="button" class="btn ghost" data-vm="close"></button></div></div>
@@ -2332,9 +2343,23 @@ function vmCap(bot,user,who){const v=vmEl();if(bot!=null){v.querySelector(".vm-b
 function vmChips(){if(!VM.on||VM.ttsOnly)return;const v=vmEl(),c=v.querySelector(".vm-chips"),btns=[...repEl.querySelectorAll("button")];
   c.innerHTML=btns.length?`<span class="vm-say">${t("vm_say")}</span>`+btns.slice(0,8).map((b,i)=>`<button type="button" data-vmchip="${i}">${esc(b.textContent)}</button>`).join(""):""}
 new MutationObserver(()=>vmChips()).observe(document.getElementById("replies"),{childList:true});
+/* ---- Tavus talking avatar (hosted version with TAVUS_API_KEY): ELIA's face speaks her replies with lip sync ---- */
+function vmTavusStart(){const T=window.EliaTavus;if(!T||VM.tv||VM.ttsOnly)return;
+  Promise.resolve(T.ready).then(ok=>{if(!ok||!VM.on||VM.ttsOnly||VM.tv)return;const v=vmEl();VM.tv="starting";v.classList.add("tv");vmCap(t("vm_connect"),null,"elia");
+    const fail=why=>{if(VM.tv!=="starting"&&VM.tv!=="ready")return;console.warn("ELIA avatar unavailable, using voice only:",why);VM.tv="failed";clearTimeout(VM.tvTo);v.classList.remove("tv","tv-on","talking");
+      if(VM.tvItem){VM.tvItem=null;clearTimeout(VM.tvGuard);VM.speaking=false}try{T.stop()}catch(e){}vmPump()};
+    VM.tvTo=setTimeout(()=>{if(VM.tv==="starting")fail("timeout")},20000);
+    T.start({onVideo:tr=>{const el=v.querySelector(".vm-av video");el.srcObject=new MediaStream([tr]);el.play().catch(()=>{});
+        if(VM.tv==="starting"){clearTimeout(VM.tvTo);setTimeout(()=>{if(VM.tv!=="starting")return;VM.tv="ready";v.classList.add("tv-on");vmPump()},700)}},
+      onAudio:tr=>{const a=v.querySelector(".vm-aud");a.srcObject=new MediaStream([tr]);a.play().catch(()=>{})},
+      onStarted:()=>{VM.tvTalking=true;v.classList.add("talking")},
+      onStopped:()=>{VM.tvTalking=false;v.classList.remove("talking");setTimeout(()=>{if(!VM.tvTalking&&VM.speaking&&VM.tvItem)vmSpoken()},450)},
+      onGone:()=>fail("left"),onError:e=>fail(e)}).catch(e=>fail(e&&e.message))})}
+function vmTavusStop(){if(!VM.tv)return;VM.tv=null;clearTimeout(VM.tvTo);clearTimeout(VM.tvGuard);VM.tvItem=null;try{window.EliaTavus&&EliaTavus.stop()}catch(e){}
+  const v=document.getElementById("vm");if(v){v.classList.remove("tv","tv-on","talking");const el=v.querySelector(".vm-av video");if(el)el.srcObject=null;const a=v.querySelector(".vm-aud");if(a)a.srcObject=null}}
 /* ---- open / close ---- */
 async function vmOpen(){if(VM.on&&!VM.ttsOnly)return;vmAudioUnlock();appConfig();vmPill(false);const v=vmEl();vmText();v.hidden=false;v.querySelector(".vm-nomic").hidden=true;VM.on=true;VM.ttsOnly=false;VM.muted=false;VM.queue=[];
-  vmCap("", "");vmChips();vmState("thinking");
+  vmCap("", "");vmChips();vmState("thinking");vmTavusStart();
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   try{if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)VM.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}})}catch(e){VM.stream=null}
   if(!VM.on)return vmRelease();
@@ -2343,7 +2368,7 @@ async function vmOpen(){if(VM.on&&!VM.ttsOnly)return;vmAudioUnlock();appConfig()
   vmSay(t("vm_hello"),"elia")}
 function vmNoMic(){const v=vmEl();v.querySelector(".vm-nomic").hidden=false;vmState("paused");v.querySelector(".vm-nomic .btn").focus()}
 function vmRelease(){if(VM.stream)VM.stream.getTracks().forEach(x=>x.stop());VM.stream=null;if(VM.ac)VM.ac.close().catch(()=>{});VM.ac=null;VM.an=null;cancelAnimationFrame(VM.raf)}
-function vmClose(){VM.on=false;VM.ttsOnly=false;VM.queue=[];clearTimeout(VM.idleT);vmStopListen();vmStopAudio();VM.speaking=false;vmRelease();const v=document.getElementById("vm");if(v)v.hidden=true;vmPill(false);$("#inp").focus()}
+function vmClose(){VM.on=false;VM.ttsOnly=false;VM.queue=[];clearTimeout(VM.idleT);vmStopListen();vmStopAudio();vmTavusStop();VM.speaking=false;vmRelease();const v=document.getElementById("vm");if(v)v.hidden=true;vmPill(false);$("#inp").focus()}
 function vmTtsOnly(){vmAudioUnlock();vmRelease();VM.ttsOnly=true;VM.on=true;const v=vmEl();v.hidden=true;vmPill(true);vmSay(t("vm_tts_on"),"elia")}
 function vmPill(show){let p=document.getElementById("vmPill");if(!p){p=document.createElement("div");p.id="vmPill";p.className="vm-pill";p.hidden=true;document.getElementById("composer").before(p);
     p.addEventListener("click",e=>{if(e.target.closest("[data-vmoff]"))vmClose()})}
@@ -2365,14 +2390,20 @@ function ttsOn(){return!!(APPCFG_V&&APPCFG_V.tts&&TTS_AC)&&(VM.ttsErr||0)<2}
 function ttsFetch(text,who){return fetch("/api/tts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text,lang:S.lang,who})})
   .then(r=>{if(!r.ok)throw new Error("tts "+r.status);return r.arrayBuffer()}).then(b=>new Promise((ok,no)=>TTS_AC.decodeAudioData(b,ok,no)))
   .then(buf=>{VM.ttsErr=0;return buf}).catch(e=>{VM.ttsErr=(VM.ttsErr||0)+1;console.warn("ELIA voice: Cartesia unavailable, using the browser voice",e&&e.message);return null})}
-function vmStopAudio(){try{if(VM.src){VM.src.onended=null;VM.src.stop()}}catch(e){}VM.src=null;cancelAnimationFrame(VM.lraf);try{speechSynthesis.cancel()}catch(e){}}
+function vmStopAudio(){try{if(VM.src){VM.src.onended=null;VM.src.stop()}}catch(e){}VM.src=null;cancelAnimationFrame(VM.lraf);try{speechSynthesis.cancel()}catch(e){}
+  if(VM.tvItem){VM.tvItem=null;clearTimeout(VM.tvGuard);try{EliaTavus.interrupt()}catch(e){}}}
+const vmFace=who=>(VM.tv==="starting"||VM.tv==="ready")&&who!=="sim";
 function vmSay(text,who){if(!VM.on||!text)return;const clean=text.replace(/\[[^\]]{2,90}\]/g,"").replace(/\*\*/g,"").replace(/[•✓☎🔒🚨⚠]/g,"").replace(/\s+/g," ").trim();if(!clean)return;
-  const it={text:clean.slice(0,900),who};if(ttsOn())it.buf=ttsFetch(it.text,who);VM.queue.push(it);vmPump()}
+  const it={text:clean.slice(0,900),who};if(ttsOn()&&!vmFace(who))it.buf=ttsFetch(it.text,who);VM.queue.push(it);vmPump()}
 function vmPump(){if(!VM.on||VM.speaking||!VM.queue.length)return;
+  /* the avatar is still joining: hold ELIA's lines until her face is ready (or the 20 s fallback) */
+  if(VM.tv==="starting"&&VM.queue[0].who!=="sim"){vmState("thinking");return}
   const it=VM.queue.shift(),{text,who}=it;vmStopListen();VM.speaking=true;if(!VM.ttsOnly){vmState("speaking");vmCap(text,"",who)}
+  if(VM.tv==="ready"&&who!=="sim"&&window.EliaTavus&&EliaTavus.say(text)){VM.tvItem=it;clearTimeout(VM.tvGuard);VM.tvGuard=setTimeout(()=>{if(VM.tvItem===it)vmSpoken()},Math.max(6000,text.length*90));return}
+  if(!it.buf&&ttsOn()&&who!=="sim"&&VM.tv==="failed")it.buf=ttsFetch(text,who);
   if(it.buf){it.buf.then(b=>{if(!VM.on||!VM.speaking)return;if(b)vmPlay(b,text,who);else vmBrowserSay(text,who)});return}
   vmBrowserSay(text,who)}
-function vmSpoken(){if(!VM.speaking)return;VM.speaking=false;VM.src=null;cancelAnimationFrame(VM.lraf);if(VM.queue.length)vmPump();else vmMaybeListen()}
+function vmSpoken(){if(!VM.speaking)return;VM.speaking=false;VM.src=null;VM.tvItem=null;clearTimeout(VM.tvGuard);cancelAnimationFrame(VM.lraf);if(VM.queue.length)vmPump();else vmMaybeListen()}
 function vmPlay(buf,text,who){try{const src=TTS_AC.createBufferSource(),an=TTS_AC.createAnalyser();an.fftSize=256;src.buffer=buf;src.connect(an);an.connect(TTS_AC.destination);VM.src=src;
     const orb=document.querySelector(".vm-orb"),a=new Uint8Array(an.fftSize);const lv=()=>{an.getByteTimeDomainData(a);let q=0;for(const x of a){const d=(x-128)/128;q+=d*d}if(orb)orb.style.setProperty("--lvl",Math.min(1,Math.sqrt(q/a.length)*4).toFixed(3));VM.lraf=requestAnimationFrame(lv)};lv();
     src.onended=()=>{if(orb)orb.style.setProperty("--lvl","0");vmSpoken()};src.start()}catch(e){vmBrowserSay(text,who)}}
@@ -2411,14 +2442,14 @@ function vmMatchReply(text){const btns=[...repEl.querySelectorAll("button")];if(
   if(bs<0.6&&ord){const n={first:1,one:1,"1":1,primero:1,primera:1,primer:1,second:2,two:2,"2":2,segundo:2,segunda:2,third:3,three:3,"3":3,tercero:3,tercera:3,tercer:3,fourth:4,four:4,"4":4}[ord[1]];if(btns[n-1])return btns[n-1]}
   return bs>=0.6?best:null}
 function vmHeard(text){vmCap(null,text);if(/^(?:stop|end voice( mode)?|exit voice mode|goodbye|termina(r)?( modo de voz)?|adios|أنهِ|انهاء|إنهاء)$/i.test(vmNorm(text))){vmClose();return}
-  vmState("thinking");const b=vmMatchReply(text);
+  vmState("thinking");const b=S.await?strictMatch(text):vmMatchReply(text);
   if(b){b.click()}else{const i=$("#inp");i.value=text;$("#composer").requestSubmit()}
   vmMaybeListen(1500)}
-Object.assign(L.en,{vm_title:"Voice",vm_listen:"Listening…",vm_think:"Thinking…",vm_speak:"Speaking · tap to interrupt",vm_paused:"Paused · tap the orb to talk",vm_muted:"Mic off",vm_say:"You can say",vm_hello:"I'm listening. Go ahead.",vm_end:"End",vm_mute:"Mute",vm_unmute:"Unmute",
+Object.assign(L.en,{vm_title:"Voice",vm_connect:"Connecting to ELIA…",vm_listen:"Listening…",vm_think:"Thinking…",vm_speak:"Speaking · tap to interrupt",vm_paused:"Paused · tap the orb to talk",vm_muted:"Mic off",vm_say:"You can say",vm_hello:"I'm listening. Go ahead.",vm_end:"End",vm_mute:"Mute",vm_unmute:"Unmute",
  vm_nomic_t:"Voice input isn't available here",vm_nomic_d:"This view doesn't allow the microphone. I can still read my replies aloud while you type, or use the standalone version for full voice conversation.",vm_tts:"Read replies aloud",vm_close:"Close",vm_tts_on:"Okay, I'll read my replies aloud.",vm_pill:"Spoken replies on",vm_off:"Turn off",vm_emerg:"This may be an emergency",vm_btn:"Voice mode"});
-Object.assign(L.es,{vm_title:"Voz",vm_listen:"Escuchando…",vm_think:"Pensando…",vm_speak:"Hablando · toca para interrumpir",vm_paused:"En pausa · toca el círculo para hablar",vm_muted:"Micrófono apagado",vm_say:"Puedes decir",vm_hello:"Te escucho. Adelante.",vm_end:"Terminar",vm_mute:"Silenciar",vm_unmute:"Activar mic",
+Object.assign(L.es,{vm_title:"Voz",vm_connect:"Conectando con ELIA…",vm_listen:"Escuchando…",vm_think:"Pensando…",vm_speak:"Hablando · toca para interrumpir",vm_paused:"En pausa · toca el círculo para hablar",vm_muted:"Micrófono apagado",vm_say:"Puedes decir",vm_hello:"Te escucho. Adelante.",vm_end:"Terminar",vm_mute:"Silenciar",vm_unmute:"Activar mic",
  vm_nomic_t:"La entrada de voz no está disponible aquí",vm_nomic_d:"Esta vista no permite el micrófono. Aun así puedo leer mis respuestas en voz alta mientras escribes, o usa la versión independiente para conversar por voz.",vm_tts:"Leer respuestas en voz alta",vm_close:"Cerrar",vm_tts_on:"Va, leeré mis respuestas en voz alta.",vm_pill:"Respuestas habladas activadas",vm_off:"Desactivar",vm_emerg:"Esto podría ser una emergencia",vm_btn:"Modo de voz"});
-Object.assign(L.ar,{vm_title:"الصوت",vm_listen:"أستمع…",vm_think:"أفكر…",vm_speak:"أتحدث · اضغط للمقاطعة",vm_paused:"متوقف · اضغط الدائرة للتحدث",vm_muted:"الميكروفون مغلق",vm_say:"يمكنك أن تقول",vm_hello:"أنا أستمع. تفضل.",vm_end:"إنهاء",vm_mute:"كتم",vm_unmute:"تشغيل الميكروفون",
+Object.assign(L.ar,{vm_title:"الصوت",vm_connect:"جارٍ الاتصال بـ ELIA…",vm_listen:"أستمع…",vm_think:"أفكر…",vm_speak:"أتحدث · اضغط للمقاطعة",vm_paused:"متوقف · اضغط الدائرة للتحدث",vm_muted:"الميكروفون مغلق",vm_say:"يمكنك أن تقول",vm_hello:"أنا أستمع. تفضل.",vm_end:"إنهاء",vm_mute:"كتم",vm_unmute:"تشغيل الميكروفون",
  vm_nomic_t:"الإدخال الصوتي غير متاح هنا",vm_nomic_d:"لا تسمح هذه الواجهة بالميكروفون. لا يزال بإمكاني قراءة ردودي بصوت عالٍ أثناء الكتابة، أو استخدم النسخة المستقلة للمحادثة الصوتية الكاملة.",vm_tts:"اقرأ الردود بصوت عالٍ",vm_close:"إغلاق",vm_tts_on:"حسنًا، سأقرأ ردودي بصوت عالٍ.",vm_pill:"الردود المنطوقة مفعّلة",vm_off:"إيقاف",vm_emerg:"قد تكون هذه حالة طارئة",vm_btn:"الوضع الصوتي"});
 
 document.getElementById("btnVM").onclick=()=>vmOpen();
@@ -2899,7 +2930,7 @@ function bot(html,o={}){const g=gen;later(()=>new Promise(r=>{
 function sys(html,cls="sys"){later(()=>{add(cls,html)})}
 function user(html){READ.ms=0;return add("me",html)}
 function replies(list){later(()=>setReplies(list))}
-function setReplies(list){repEl.innerHTML="";S.curReplies=list;list.forEach(([label,fn,opts={}])=>{const b=document.createElement("button");b.type="button";b.textContent=label;b.onclick=()=>{clearReplies();S.curReplies=null;if(!opts.silent){const el=user(esc(label));maybeReact(el,label,opts.react||null)}fn()};repEl.appendChild(b)})}
+function setReplies(list){repEl.innerHTML="";S.curReplies=list;S.curQ=typeof curQuestion==="function"?curQuestion():"";list.forEach(([label,fn,opts={}])=>{const b=document.createElement("button");b.type="button";b.textContent=label;b.onclick=()=>{clearReplies();S.curReplies=null;if(!opts.silent){const el=user(esc(label));maybeReact(el,label,opts.react||null)}fn()};repEl.appendChild(b)})}
 function clearReplies(){repEl.innerHTML=""}
 /* After anything off-script (a question, a language switch, an unclear reply, a voice note with no words),
    bring the member back to the open question: ask it again if it was typed, and restore its buttons. */
@@ -3190,7 +3221,80 @@ $("#btnPhoto").onclick=()=>$("#photoIn").click();
 $("#btnVoice").onclick=()=>{voice()};
 
 /* free-text router */
-$("#composer").addEventListener("submit",e=>{e.preventDefault();const x=$("#inp").value.trim();if(!x)return;$("#inp").value="";const el=user(esc(x));route(x,el)});
+/* ============ Understanding free-form replies (chat and voice) ============
+   1. Safety and special requests keep their own handling: emergencies, symptoms (Sim), record questions, devices, language, reactions.
+   2. When ELIA has offered buttons, a reply that means the same as one of them picks it, in any wording or language (Claude decides).
+   3. A question that isn't an answer: health → answered from the member's data, otherwise with Claude, then back to the open question;
+      anything else → a reminder of what ELIA is for, then back to the open question. */
+const Q_RE=/[?؟]|^\s*(?:what|what's|whats|when|which|who|how|why|where|is|are|can|could|should|would|do|does|did|will|tell me|explain|qu[eé]|cu[aá]l(?:es)?|cu[aá]ndo|qui[eé]n|c[oó]mo|por qu[eé]|d[oó]nde|puedo|debo|es|son|hay|ما|ماذا|متى|من|كيف|لماذا|أين|هل)\b/i;
+const HEALTH_RE=/\b(?:health|diet|food|eat(?:ing|s)?\b|meals?\b|calori|protein|carbs?\b|sugar|fats?\b|fiber|fibre|vitamin|supplement|water|hydrat|sleep|tired|energy|stress|anxi|mood|exercis|workout|walk|steps|weight|bmi\b|blood|pressure|heart|cholesterol|glucose|diabet|a1c|medic|doctor|pain|symptom|fasting|score|prime)|salud|comida|dieta|dormir|sueño|ejercicio|peso|presi[oó]n|az[uú]car|estr[eé]s|صحة|طعام|غذاء|نوم|رياضة|وزن|ضغط|سكر|توتر/i;
+const AWAIT_DESC={name:"their first name",age:"their age in years",hw:"their height and weight",meal:"what they ate at their last meal",allergy:"any food allergies (or none)",injury:"which injury or pain limits them",ing:"what food they have at home"};
+function curQuestion(){const m=[...msgsEl.querySelectorAll(".msg:not(.me):not(.sys):not(.sim):not(.typing)")].pop();if(!m||m.classList.contains("wide")||m.querySelector(".card"))return"";
+  const c=m.cloneNode(true);c.querySelectorAll(".ts,.ph,button").forEach(x=>x.remove());return c.innerText.trim().slice(0,400)}
+function bypassSmart(x){return S.sim||simEmergency(x)||SAFE_RE.test(x)||(HAS_SIM&&!!detectSymptom(x))||(isRecQuestion(x)&&!!S.record)||WEAR_RE.test(x)||RX_OFF.test(x)||RX_ON.test(x)
+  ||/\b(espa[nñ]ol|spanish|english|ingl[eé]s|arabic)\b|عربي|العربية|الإنجليزية/i.test(x)||/\d{1,2}\s*(min|minutes|minutos|دقائق|دقيقة)/i.test(x)||/\b(recap|resumen|summary)\b|ملخص/i.test(x)}
+/* exact-ish match only (used while ELIA waits for typed text, so "skip breakfast, had coffee" doesn't press Skip) */
+function strictMatch(x){const u=vmNorm(x);for(const b of repEl.querySelectorAll("button")){const l=vmNorm(b.textContent);if(l&&(u===l||(u.startsWith(l)&&u.length<=l.length+6)))return b}return null}
+function pickReply(i,el,x){const r=S.curReplies&&S.curReplies[i];if(!r){route(x,el);return}const [label,fn,o={}]=r;clearReplies();S.curReplies=null;maybeReact(el,label,o.react||null);
+  if(el&&!o.silent&&vmNorm(label)!==vmNorm(x)){const n=document.createElement("small");n.className="pick";n.textContent="→ "+label;const ts=el.querySelector(".ts");ts?el.insertBefore(n,ts):el.appendChild(n)}
+  fn()}
+async function classifyReply(x,opts){const s=sampleOff?null:await getSample();if(!s)return null;
+  const list=opts?opts.map((o,i)=>`${i}: ${o[0]}`).join("\n"):"(none)";const exp=S.await?(AWAIT_DESC[S.await]||"a typed answer"):null;
+  const j=await s.json(`You route messages in ELIA, a health coaching chat. Decide what the member's latest message is.
+ELIA's last message: """${curQuestion()||"(a card)"}"""
+Buttons on screen:
+${list}
+${exp?`ELIA is also waiting for a typed answer: ${exp}.`:"ELIA is not waiting for a typed answer."}
+Member's message: """${x}"""
+Choose one:
+- "option": the message means the same as one of the buttons (paraphrase, synonym, yes/no, partial wording, or another language). Give the button number.
+- "answer": it directly answers what ELIA is waiting for.
+- "health": a separate question or request about health, wellness, nutrition, food, exercise, sleep, stress, symptoms, medicines, ELIA's scores or plan, or the member's own data.
+- "other": unrelated to health (weather, sports, news, trivia, coding, etc.).
+- "unclear": none of these.
+Reply with only JSON: {"kind":"option|answer|health|other|unclear","index":number|null}`,{modelTier:"quick"});
+  return j&&j.kind?j:null}
+function memberContext(){const L2=[];for(const[k,f]of Object.entries(S.facts||{})){if(!f||f.cf==="cf_declined"||["lang","tz","rx"].includes(k))continue;try{const v=fv(f);if(v)L2.push(`${t("f_"+k)}: ${v}`)}catch(e){}}
+  if(S.meal)L2.push(`Last meal: "${S.meal.text}", Meal Quality Score ${S.meal.score}/100`);
+  try{const P=primeNow();if(P.r.display.primeScore!=null)L2.push(`Prime Score ${P.r.display.primeScore}/100 (based on ${Math.round(P.r.coverage)}% of measures)`)}catch(e){}
+  try{const w=wearInputs();if(w.stepsPerDay)L2.push(`Wearable: ${Math.round(w.stepsPerDay)} steps a day`);if(w.sleepHours)L2.push(`Wearable: ${w.sleepHours.toFixed(1)} h sleep a night`);if(w.restingHr)L2.push(`Wearable resting heart rate ${w.restingHr} bpm`)}catch(e){}
+  if(S.plan)L2.push(`Plan this week: ${S.plan.actions.filter(a=>a.kind!=="checkin").map(actTitle).join("; ")}`);
+  return L2.join("\n")}
+function healthAnswer(q){later(()=>new Promise(async res=>{const ty=add("typing",'<span class="dots"><i></i><i></i><i></i></span>');const ts=ty.querySelector(".ts");if(ts)ts.remove();
+    let txt=null;const s=sampleOff?null:await getSample();
+    if(s){try{const r=await s(`You are ELIA, Prime Health's AI health strategist: warm, practical and evidence-based. In the middle of their check-in, the member asked a health question.
+Answer in ${LANG_NAME[S.lang]}, in 2 to 5 short sentences, or up to 4 bullets starting with "- ". Plain language; you may use **bold** once or twice.
+Use the member's data below when it's relevant and say so ("Based on your…"). If it doesn't cover the question, give general, well-established guidance.
+Don't diagnose or prescribe. If it sounds like an emergency, tell them to call emergency services now. For medicines or doses, suggest checking with their doctor or pharmacist.
+Don't ask a follow-up question; the app returns to its own question after your answer.
+Member's data:
+${memberContext()||"(nothing collected yet)"}
+Question: """${q}"""`,{modelTier:"default"});txt=(r&&r.text||"").trim()||null}catch(e){}}
+    ty.remove();add("",txt?`<span class="ph">${t("ph_claude")}</span>${recMd(txt)}`:`<p>${t("hq_noai")}</p>`);res()}));resumeFlow()}
+/* After an aside, return to the open question: re-ask it and restore its buttons */
+function resumeFlow(){if(S.coreDone&&!S.await){later(()=>{if(!repEl.children.length)coreReplies()});return}
+  if(!S.await&&S.curReplies){const q=S.curQ;bot(q&&q.length<240?`<p>${t("back_to_it")}</p><p>${esc(q)}</p>`:`<p>${t("back_to_it")}</p>`);restorePrompt();return}
+  bot(t("back_to_it"),{delay:300});reprompt()}
+async function smartRoute(x,el){
+  if(bypassSmart(x)){route(x,el);return}
+  const opts=S.curReplies&&repEl.children.length?S.curReplies:null,isQ=Q_RE.test(x);
+  if(opts){const b=S.await?strictMatch(x):vmMatchReply(x);if(b){pickReply([...repEl.children].indexOf(b),el,x);return}}
+  /* plain typed answers go straight through; only questions and button-only replies need understanding */
+  if(!isQ&&(S.await||!opts)){route(x,el);return}
+  later(()=>new Promise(async res=>{const ty=add("typing",'<span class="dots"><i></i><i></i><i></i></span>');const ts=ty.querySelector(".ts");if(ts)ts.remove();
+    let c=null;try{c=await classifyReply(x,opts)}catch(e){}ty.remove();res();
+    if(!c){if(isQ&&HEALTH_RE.test(x)){bot(t("hq_noai"));resumeFlow()}else if(isQ&&!S.await){bot(t("off_topic"));resumeFlow()}else route(x,el);return}
+    if(c.kind==="option"&&opts&&Number.isInteger(c.index)&&opts[c.index]&&S.curReplies===opts){pickReply(c.index,el,x);return}
+    if(c.kind==="health"){maybeReact(el,x,null);healthAnswer(x);return}
+    if(c.kind==="other"){maybeReact(el,x,null);bot(t("off_topic"));resumeFlow();return}
+    route(x,el)}))}
+Object.assign(L.en,{back_to_it:"Now, back to where we were.",off_topic:"I'm ELIA, your health strategist, so I stick to health: food, movement, sleep, stress and your care. I can't help with that one, but ask me anything about your health.",
+ hq_noai:"That's a good health question. I can't look it up in this version, so please check with your care team. Meanwhile, I'll keep building your plan.",ph_claude:"Answered with Claude"});
+Object.assign(L.es,{back_to_it:"Ahora, volvamos a lo nuestro.",off_topic:"Soy ELIA, tu estratega de salud, así que me enfoco en la salud: alimentación, movimiento, sueño, estrés y tu atención médica. No puedo ayudarte con eso, pero pregúntame lo que quieras sobre tu salud.",
+ hq_noai:"Es una buena pregunta de salud. No puedo consultarla en esta versión, así que revísala con tu equipo de atención. Mientras tanto, sigo armando tu plan.",ph_claude:"Respondido con Claude"});
+Object.assign(L.ar,{back_to_it:"والآن، لنعد إلى ما كنا فيه.",off_topic:"أنا ELIA، مستشارتك الصحية، لذلك أركز على الصحة: الطعام والحركة والنوم والتوتر ورعايتك. لا أستطيع المساعدة في هذا، لكن اسألني أي شيء عن صحتك.",
+ hq_noai:"هذا سؤال صحي جيد. لا أستطيع البحث عنه في هذه النسخة، لذا راجع فريق رعايتك. وفي الأثناء سأواصل إعداد خطتك.",ph_claude:"أُجيب بواسطة Claude"});
+$("#composer").addEventListener("submit",e=>{e.preventDefault();const x=$("#inp").value.trim();if(!x)return;$("#inp").value="";const el=user(esc(x));smartRoute(x,el)});
 function route(x,el){
   if(S.sim){S.rx.turn++;simStep({type:"USER_TEXT",text:x},{dropUserEcho:x});return}
   const sens=rxSensitive(x),off=RX_OFF.test(x),on=!off&&RX_ON.test(x);

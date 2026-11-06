@@ -11,6 +11,18 @@ if (!existsSync(sdk)) throw new Error("Run npm install first: @nuralogix.ai/anur
 rmSync(path.join(root, "public/dfx-assets"), { recursive: true, force: true });
 cpSync(path.join(sdk, "assets"), path.join(root, "public/dfx-assets"), { recursive: true });
 
+// Tavus talking avatar (bundles the Daily call library)
+await build({
+  entryPoints: [path.join(root, "client/tavus.js")],
+  bundle: true,
+  format: "esm",
+  target: "es2022",
+  minify: true,
+  outfile: path.join(root, "public/tavus.js"),
+  logLevel: "warning",
+  legalComments: "none",
+});
+
 await build({
   entryPoints: [path.join(root, "client/dfx-scan.js")],
   bundle: true,
@@ -21,4 +33,4 @@ await build({
   logLevel: "warning",
   legalComments: "none",
 });
-console.log("built public/dfx-scan.js and public/dfx-assets/");
+console.log("built public/dfx-scan.js, public/tavus.js and public/dfx-assets/");

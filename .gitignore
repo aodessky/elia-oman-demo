@@ -2,3 +2,4 @@ node_modules/
 public/dfx-scan.js
 public/dfx-assets/
 .env
+public/tavus.js
