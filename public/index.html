@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+<script>if(location.hostname==="elia-demo.onrender.com")location.replace("https://elia-oman-demo.onrender.com/"+location.hash)</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
@@ -1464,7 +1465,9 @@ let SAMPLE_P=null,sampleOff=false;
 function getSample(){if(!SAMPLE_P)SAMPLE_P=(window.claude&&typeof claude.use==="function")?claude.use("sample").catch(()=>null):serverSample();return SAMPLE_P}
 /* Hosted version: Claude through the site's own server (/api/ai). Same interface as the artifact runtime's sample(). */
 let APPCFG=null,APPCFG_V=null;
-function appConfig(){if(!APPCFG)APPCFG=(location.protocol.startsWith("http")?fetch("/api/config",{cache:"no-store"}).then(r=>r.ok?r.json():{}).catch(()=>({})):Promise.resolve({})).then(c=>(APPCFG_V=c||{}));return APPCFG}
+/* server:true only when this page is served by the ELIA server (not the Claude preview or a static copy). A failed fetch is retried on the next call. */
+function appConfig(){if(!APPCFG)APPCFG=(location.protocol.startsWith("http")&&!window.claude?fetch("/api/config",{cache:"no-store"}).then(r=>r.ok?r.json().then(j=>({...j,server:true})):{server:false}).catch(()=>{APPCFG=null;return{server:false,offline:true}}):Promise.resolve({server:false})).then(c=>(APPCFG_V=c||{}));return APPCFG}
+const HOSTED_URL="https://elia-oman-demo.onrender.com/";
 appConfig();
 async function serverSample(){const c=await appConfig();if(!c.ai)return null;
   const shrink=f=>new Promise(res=>{const img=new Image(),u=URL.createObjectURL(f);img.onload=()=>{const k=Math.min(1,1568/Math.max(img.width,img.height));const cv=document.createElement("canvas");cv.width=Math.round(img.width*k);cv.height=Math.round(img.height*k);cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height);URL.revokeObjectURL(u);res(cv.toDataURL("image/jpeg",0.85).split(",")[1])};img.onerror=()=>{URL.revokeObjectURL(u);res(null)};img.src=u});
@@ -1792,19 +1795,24 @@ function fsFrame(src){const {ctx}=fsS,vw=src.videoWidth,vh=src.videoHeight;if(!v
   for(let y=0;y<FS.H;y++)for(let x=0;x<FS.W;x++){const i=(y*FS.W+x)*4,R=d[i],G=d[i+1],B=d[i+2];const e=((x-FS.cx)/FS.rx)**2+((y-FS.cy)/FS.ry)**2;
     const Y=0.299*R+0.587*G+0.114*B,Cb=128-0.168736*R-0.331264*G+0.5*B,Cr=128+0.5*R-0.418688*G-0.081312*B;const sk=Y>40&&Y<245&&Cb>=72&&Cb<=135&&Cr>=130&&Cr<=180;
     if(e<=1){nIn++;lum+=Y;if(sk){skIn++;if(e<=0.5&&y<FS.cy+12){r+=R;g+=G;b+=B;rn++}}}else if(e<=1.7){nOut++;if(sk)skOut++}
-    if(sk&&e<=1.7){cxs+=x;cys+=y;cn++}}
+    if(sk&&e<=1){cxs+=x;cys+=y;cn++}}
   const fIn=skIn/nIn,fOut=skOut/Math.max(1,nOut);lum/=nIn;const c=cn?{x:cxs/cn,y:cys/cn}:null;
   let mv=0;if(c&&fsS.lastC)mv=Math.hypot(c.x-fsS.lastC.x,c.y-fsS.lastC.y);fsS.lastC=c;fsS.motion=fsS.motion*0.8+mv*0.2;
   const light=lum<50?"dark":lum>215?"bright":"ok";
-  let pos="ok";if(fIn<0.18||!c)pos="noface";else if(Math.abs(c.x-FS.cx)>11||Math.abs(c.y-FS.cy)>13)pos="center";else if(fIn<0.4)pos="closer";else if(fOut>0.5)pos="back";
-  const still=fsS.motion<1.4;
+  /* Forgiving on purpose: a skin-toned wall must not trap the member between "closer" and "back".
+     "back" only when the face overflows the oval; centring uses skin inside the oval only. */
+  let pos="ok";if(fIn<0.15||!c||cn<60)pos="noface";else if(Math.abs(c.x-FS.cx)>15||Math.abs(c.y-FS.cy)>17)pos="center";else if(fIn<0.3)pos="closer";else if(fIn>0.92&&fOut>0.7)pos="back";
+  const still=fsS.motion<1.9;
   return{pos,light,still,ok:pos==="ok"&&light==="ok"&&still,face:pos!=="noface",rgb:rn>40?{r:r/rn,g:g/rn,b:b/rn}:null}}
 function fsAdvice(f){return f.pos==="noface"?t("fs_noface"):f.light==="dark"?t("fs_dark"):f.light==="bright"?t("fs_bright"):f.pos==="center"?t("fs_center"):f.pos==="closer"?t("fs_closer"):f.pos==="back"?t("fs_back"):!f.still?t("fs_still"):t("fs_ok")}
 function fsLoop(){if(!fsS||fsS.phase==="done")return;const v=fsS.video,now=performance.now();
   const step=()=>{if(!fsS)return;const f=fsFrame(v);if(f){const checks={light:f.light==="ok",pos:f.pos==="ok",move:f.still};
-    if(fsS.phase==="align"){fsS.okRun=f.ok?fsS.okRun+1:0;fsUi({msg:f.ok?t("fs_ok"):fsAdvice(f),checks,progress:0,time:"",state:f.ok?"good":"align"});
-      if(fsS.okRun>=20){fsS.phase="measure";fsS.t0=now;fsS.samples=[];fsS.lostAt=0}}
-    else if(fsS.phase==="measure"){const el=(now-fsS.t0)/1000;const lost=f.pos!=="ok"||f.light!=="ok";
+    if(fsS.phase==="align"){fsS.okRun=f.ok?fsS.okRun+1:Math.max(0,fsS.okRun-3);
+      /* a face in usable light for 6 s starts the scan even if the fine positioning never settles */
+      const usable=f.face&&f.light==="ok"&&f.rgb;if(usable){fsS.usableT=(fsS.usableT||0)+(fsS.lastT?Math.min(100,now-fsS.lastT):0)}fsS.lastT=now;
+      fsUi({msg:f.ok?t("fs_ok"):fsAdvice(f),checks,progress:0,time:"",state:f.ok?"good":"align"});
+      if(fsS.okRun>=15||(usable&&fsS.usableT>6000)){fsS.phase="measure";fsS.t0=now;fsS.samples=[];fsS.lostAt=0;fsS.usableT=0}}
+    else if(fsS.phase==="measure"){const el=(now-fsS.t0)/1000;const lost=f.pos==="noface"||f.light!=="ok"||!f.rgb;
       if(f.rgb&&!lost)fsS.samples.push({t:now,...f.rgb});
       if(lost){fsS.lostAt=fsS.lostAt||now;if(now-fsS.lostAt>2500){fsS.phase="align";fsS.okRun=0;fsUi({msg:t("fs_lost"),progress:0,hr:null,state:"align"});}else fsUi({msg:fsAdvice(f),checks})}
       else{fsS.lostAt=0;fsUi({msg:!f.still?t("fs_still"):t("fs_measuring"),checks,progress:100*el/FS.DUR,time:`${Math.max(0,Math.ceil(FS.DUR-el))} s`,state:"measure"})}
@@ -1895,7 +1903,8 @@ function dfxOpen(){const m=fsEl();fsText();m.hidden=false;const st=m.querySelect
     onError:(code,detail)=>{if(dfxS!==S2)return;dfxS=null;dfxHide();console.warn("DeepAffex",code,detail);
       if(code==="camera"){bot(t("fs_cam_denied"));replies([[t("retry"),openScan],[t("cont"),()=>{S.scan="skipped";profile()}]]);return}
       if(code==="measure"||code==="results"){bot(t("scan_fail"));replies([[t("retry"),openScan],[t("cont"),()=>{S.scan="skipped";profile()}]]);return}
-      S.dfxDown=true;bot(t("fs_dfx_unavail"));replies([[t("fs_use_device"),openScan],[t("cont"),()=>{S.scan="skipped";profile()}]])}})}
+      /* NuraLogix not reachable (token, domain not yet allowed, assets, connection): switch straight to the on-device scan */
+      S.dfxDown=true;bot(t("fs_dfx_switch"),{delay:400});later(()=>fsOpen())}})}
 function dfxHide(){const m=$("#faceScan");if(m){m.hidden=true;const st=m.querySelector(".fs-stage");st.classList.remove("dfx","measuring","done","good");const md=st.querySelector(".fs-media");if(md)md.innerHTML="";m.querySelector(".fs-brand small").textContent=t("ph_nura")}}
 function dfxStop(){const s=dfxS;dfxS=null;if(s&&s.ctl)s.ctl.cancel();dfxHide()}
 /* DeepAffex points: label, unit, decimals, and (for the well-known ones) a simple range reading */
@@ -1964,21 +1973,24 @@ function dfxDone(p){const P=p.points,v=k=>P[k]?P[k].value:null;
   addUpdate(()=>`${t("fs_brand")}: ${res.hr!=null?res.hr+" bpm":""}${res.sbp!=null?` · ${res.sbp}/${res.dbp} mmHg`:""}`);renderHQ();flashHQ();
   bot(dfxCard(p),{cls:"wide",delay:500});profile()}
 Object.assign(L.en,{dfx_brand:"NuraLogix DeepAffex",fs_preparing:"Preparing a secure scan…",fs_downloading:"Getting the scan ready… {p}%",fs_dir:"Look straight at the camera",fs_backlit:"Strong light behind you. Turn to face the light",fs_imgq:"Camera image is too unclear. Wipe the lens or find more light",fs_lowfps:"Camera is too slow. Find brighter light or close other apps",
-  fs_dfx_analyzing:"Analyzing your blood-flow signal…",fs_dfx_unavail:"The full NuraLogix scan isn't available right now. You can use the on-device scan instead, which measures heart rate, breathing and heart rate variability.",fs_use_device:"Use on-device scan",fs_cam_denied:"I couldn't open your camera. Allow camera access for this site, then try again.",
+  fs_dfx_analyzing:"Analyzing your blood-flow signal…",fs_dfx_switch:"The full NuraLogix scan isn't reachable right now, so I'm switching to the on-device scan. It measures heart rate, breathing and heart rate variability.",fs_dfx_unavail:"The full NuraLogix scan isn't available right now. You can use the on-device scan instead, which measures heart rate, breathing and heart rate variability.",fs_use_device:"Use on-device scan",fs_cam_denied:"I couldn't open your camera. Allow camera access for this site, then try again.",
   dfx_res_sub:"Measured from the blood flow in your face over about 30 seconds",dfx_more:"More measures ({n})",dfx_snr:"Signal quality",dfx_pred_demog:"Some estimates used predicted age or body size because those details were missing.",dfx_degraded:"Some measures had reduced accuracy in this scan.",dfx_disc:"Wellness estimates from NuraLogix DeepAffex, not a diagnosis."});
 Object.assign(L.es,{dfx_brand:"NuraLogix DeepAffex",fs_preparing:"Preparando un escaneo seguro…",fs_downloading:"Preparando el escaneo… {p}%",fs_dir:"Mira directo a la cámara",fs_backlit:"Hay luz fuerte detrás de ti. Ponte de frente a la luz",fs_imgq:"La imagen no es clara. Limpia la lente o busca más luz",fs_lowfps:"La cámara va lenta. Busca más luz o cierra otras apps",
-  fs_dfx_analyzing:"Analizando la señal de tu flujo sanguíneo…",fs_dfx_unavail:"El escaneo completo de NuraLogix no está disponible en este momento. Puedes usar el escaneo en el dispositivo, que mide frecuencia cardiaca, respiración y variabilidad cardiaca.",fs_use_device:"Usar escaneo en el dispositivo",fs_cam_denied:"No pude abrir tu cámara. Permite el acceso a la cámara para este sitio e inténtalo de nuevo.",
+  fs_dfx_analyzing:"Analizando la señal de tu flujo sanguíneo…",fs_dfx_switch:"El escaneo completo de NuraLogix no está disponible en este momento, así que cambio al escaneo en el dispositivo. Mide frecuencia cardiaca, respiración y variabilidad cardiaca.",fs_dfx_unavail:"El escaneo completo de NuraLogix no está disponible en este momento. Puedes usar el escaneo en el dispositivo, que mide frecuencia cardiaca, respiración y variabilidad cardiaca.",fs_use_device:"Usar escaneo en el dispositivo",fs_cam_denied:"No pude abrir tu cámara. Permite el acceso a la cámara para este sitio e inténtalo de nuevo.",
   dfx_res_sub:"Medido a partir del flujo sanguíneo de tu rostro durante unos 30 segundos",dfx_more:"Más mediciones ({n})",dfx_snr:"Calidad de señal",dfx_pred_demog:"Algunas estimaciones usaron edad o talla predichas porque faltaban esos datos.",dfx_degraded:"Algunas mediciones tuvieron menor precisión en este escaneo.",dfx_disc:"Estimaciones de bienestar de NuraLogix DeepAffex, no un diagnóstico."});
 Object.assign(L.ar,{dfx_brand:"NuraLogix DeepAffex",fs_preparing:"جارٍ تجهيز فحص آمن…",fs_downloading:"جارٍ تجهيز الفحص… {p}%",fs_dir:"انظر مباشرة إلى الكاميرا",fs_backlit:"يوجد ضوء قوي خلفك. اجعل الضوء أمام وجهك",fs_imgq:"الصورة غير واضحة. امسح العدسة أو ابحث عن إضاءة أفضل",fs_lowfps:"الكاميرا بطيئة. ابحث عن إضاءة أقوى أو أغلق التطبيقات الأخرى",
-  fs_dfx_analyzing:"جارٍ تحليل إشارة تدفق الدم في وجهك…",fs_dfx_unavail:"فحص NuraLogix الكامل غير متاح الآن. يمكنك استخدام الفحص على الجهاز بدلًا منه، وهو يقيس معدل النبض والتنفس وتقلب نبض القلب.",fs_use_device:"استخدام الفحص على الجهاز",fs_cam_denied:"لم أتمكن من فتح الكاميرا. اسمح بالوصول إلى الكاميرا لهذا الموقع ثم حاول مرة أخرى.",
+  fs_dfx_analyzing:"جارٍ تحليل إشارة تدفق الدم في وجهك…",fs_dfx_switch:"فحص NuraLogix الكامل غير متاح الآن، لذلك سأنتقل إلى الفحص على الجهاز. يقيس معدل ضربات القلب والتنفس وتقلب معدل ضربات القلب.",fs_dfx_unavail:"فحص NuraLogix الكامل غير متاح الآن. يمكنك استخدام الفحص على الجهاز بدلًا منه، وهو يقيس معدل النبض والتنفس وتقلب نبض القلب.",fs_use_device:"استخدام الفحص على الجهاز",fs_cam_denied:"لم أتمكن من فتح الكاميرا. اسمح بالوصول إلى الكاميرا لهذا الموقع ثم حاول مرة أخرى.",
   dfx_res_sub:"مقاس من تدفق الدم في وجهك خلال نحو 30 ثانية",dfx_more:"قياسات إضافية ({n})",dfx_snr:"جودة الإشارة",dfx_pred_demog:"استخدمت بعض التقديرات عمرًا أو حجم جسم متوقعًا لعدم توفر هذه البيانات.",dfx_degraded:"كانت دقة بعض القياسات أقل في هذا الفحص.",dfx_disc:"تقديرات للعافية من NuraLogix DeepAffex، وليست تشخيصًا."});
 /* ============ Google Calendar (hosted version: OAuth and Calendar API calls run on the site's server) ============ */
 const GCAL={sid:null,email:null};
 const CAL_WIN={slot_am:[[7,0],[9,0]],slot_noon:[[12,30],[14,0]],slot_pm:[[17,30],[20,0]]};
 async function gpost(action,body){const r=await fetch("/api/google/"+action,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sid:GCAL.sid,...body})});const j=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(j.error||"google");e.status=r.status;throw e}return j}
+function calUnavailable(c){if(c&&c.server){bot(`<p>${t("cal_unavail")}</p>`);return}
+  bot(`<p>${t("cal_hosted")}</p><p><a href="${HOSTED_URL}" target="_blank" rel="noopener">${HOSTED_URL.replace(/^https:\/\/|\/$/g,"")}</a></p>`)}
 function calConnect(){
   if(GCAL.sid){calPropose();return}
-  if(!(APPCFG_V&&APPCFG_V.google)){bot(`<p>${t("cal_unavail")}</p>`);askSlotAgain();return}
+  if(!APPCFG_V||APPCFG_V.offline){appConfig().then(c=>{if(c.google)bot(t("cal_retry_tap"));else calUnavailable(c)});askSlotAgain(true);return}
+  if(!APPCFG_V.google){calUnavailable(APPCFG_V);askSlotAgain();return}
   const sid=(crypto.randomUUID?crypto.randomUUID():String(Math.random()).slice(2)+Date.now())+"-"+Date.now().toString(36);
   const w=window.open("/api/google/auth?sid="+encodeURIComponent(sid),"elia-google","width=520,height=680");
   if(!w){bot(t("cal_popup_blocked"));askSlotAgain(true);return}
@@ -2023,15 +2035,15 @@ async function calAdd(){const a=getAct("move"),P=S.calPlan;if(!a||!P)return;cons
   bot(`<p>${t("cal_added",{n:links.length})}</p><ul class="plain">${links.map(l=>`<li>${fmtD(l.x.start)} · ${fmtT(l.x.start)} · <a href="${esc(l.link)}" target="_blank" rel="noopener">${t("cal_open")}</a></li>`).join("")}</ul>${fail?`<p class="note">${t("cal_partial",{n:fail})}</p>`:""}`);
   afterMove()}
 Object.assign(L.en,{cal_btn:"Connect Google Calendar",cal_opening:"Opening Google sign-in in a new window. Choose your account and allow ELIA to see when you're free and add events.",cal_popup_blocked:"Your browser blocked the sign-in window. Allow pop-ups for this site, then tap Connect Google Calendar again.",cal_failed:"Google Calendar didn't connect. You can try again, or just pick a time.",cal_timeout:"I didn't hear back from Google. You can try again, or just pick a time.",
-  cal_connected:"Connected to Google Calendar ({email}). Let me look at your week…",cal_connected_upd:"Google Calendar connected",cal_unavail:"Calendar connection isn't available in this version of ELIA. For now, pick the time that suits you best.",cal_none_free:"I couldn't find a free {min}-minute slot at that time of day this week.",cal_which:"Which time of day works better?",
+  cal_hosted:"Google Calendar works in the hosted ELIA app, which has the secure sign-in it needs. Open it here, or pick the time that suits you best for now.",cal_retry_tap:"Calendar is ready now. Tap Connect Google Calendar again.",cal_connected:"Connected to Google Calendar ({email}). Let me look at your week…",cal_connected_upd:"Google Calendar connected",cal_unavail:"Calendar connection isn't available in this version of ELIA. For now, pick the time that suits you best.",cal_none_free:"I couldn't find a free {min}-minute slot at that time of day this week.",cal_which:"Which time of day works better?",
   cal_prop_t:"Here's what fits your week",cal_prop_sub:"Free times in your Google Calendar ({email}). Each one repeats weekly for 4 weeks.",cal_fewer:"Only {n} free slots this week at this time of day.",cal_add:"Add to my calendar",cal_other:"Different times",cal_notnow:"Not now",cal_skip:"No problem. Pick the time that suits you and I'll remember it.",
   cal_added:"Added {n} sessions to your Google Calendar, with a reminder 10 minutes before each.",cal_added_upd:"{n} sessions added to Google Calendar",cal_open:"Open",cal_partial:"{n} couldn't be added.",cal_expired:"Your Google Calendar connection expired. Tap Connect Google Calendar to reconnect.",cal_err:"Google Calendar didn't accept that, so nothing was added. You can try again or pick a time.",cal_desc:"Planned with ELIA by Prime Health. Message ELIA to change it."});
 Object.assign(L.es,{cal_btn:"Conectar Google Calendar",cal_opening:"Abriendo el inicio de sesión de Google en una ventana nueva. Elige tu cuenta y permite que ELIA vea cuándo estás libre y agregue eventos.",cal_popup_blocked:"Tu navegador bloqueó la ventana de inicio de sesión. Permite ventanas emergentes para este sitio y toca Conectar Google Calendar de nuevo.",cal_failed:"Google Calendar no se conectó. Puedes intentarlo de nuevo o elegir un horario.",cal_timeout:"No recibí respuesta de Google. Puedes intentarlo de nuevo o elegir un horario.",
-  cal_connected:"Conectado a Google Calendar ({email}). Déjame ver tu semana…",cal_connected_upd:"Google Calendar conectado",cal_unavail:"La conexión de calendario no está disponible en esta versión de ELIA. Por ahora, elige el horario que mejor te acomode.",cal_none_free:"No encontré un espacio libre de {min} minutos a esa hora del día esta semana.",cal_which:"¿Qué hora del día te acomoda mejor?",
+  cal_hosted:"Google Calendar funciona en la app ELIA en línea, que tiene el inicio de sesión seguro que necesita. Ábrela aquí o, por ahora, elige el horario que mejor te acomode.",cal_retry_tap:"El calendario ya está listo. Toca Conectar Google Calendar otra vez.",cal_connected:"Conectado a Google Calendar ({email}). Déjame ver tu semana…",cal_connected_upd:"Google Calendar conectado",cal_unavail:"La conexión de calendario no está disponible en esta versión de ELIA. Por ahora, elige el horario que mejor te acomode.",cal_none_free:"No encontré un espacio libre de {min} minutos a esa hora del día esta semana.",cal_which:"¿Qué hora del día te acomoda mejor?",
   cal_prop_t:"Esto cabe en tu semana",cal_prop_sub:"Horarios libres en tu Google Calendar ({email}). Cada uno se repite cada semana durante 4 semanas.",cal_fewer:"Solo hay {n} espacios libres esta semana a esa hora.",cal_add:"Agregar a mi calendario",cal_other:"Otros horarios",cal_notnow:"Ahora no",cal_skip:"Sin problema. Elige el horario que te acomode y lo recordaré.",
   cal_added:"Agregué {n} sesiones a tu Google Calendar, con un recordatorio 10 minutos antes de cada una.",cal_added_upd:"{n} sesiones agregadas a Google Calendar",cal_open:"Abrir",cal_partial:"{n} no se pudieron agregar.",cal_expired:"Tu conexión con Google Calendar expiró. Toca Conectar Google Calendar para reconectar.",cal_err:"Google Calendar no lo aceptó, así que no se agregó nada. Puedes intentarlo de nuevo o elegir un horario.",cal_desc:"Planeado con ELIA de Prime Health. Escríbele a ELIA para cambiarlo."});
 Object.assign(L.ar,{cal_btn:"ربط تقويم Google",cal_opening:"جارٍ فتح تسجيل الدخول إلى Google في نافذة جديدة. اختر حسابك واسمح لـ ELIA برؤية أوقات فراغك وإضافة مواعيد.",cal_popup_blocked:"منع المتصفح نافذة تسجيل الدخول. اسمح بالنوافذ المنبثقة لهذا الموقع ثم اضغط ربط تقويم Google مرة أخرى.",cal_failed:"لم يتم ربط تقويم Google. يمكنك المحاولة مرة أخرى أو اختيار وقت.",cal_timeout:"لم يصلني رد من Google. يمكنك المحاولة مرة أخرى أو اختيار وقت.",
-  cal_connected:"تم الربط بتقويم Google ({email}). دعني أنظر إلى أسبوعك…",cal_connected_upd:"تم ربط تقويم Google",cal_unavail:"ربط التقويم غير متاح في هذه النسخة من ELIA. اختر الآن الوقت الأنسب لك.",cal_none_free:"لم أجد وقتًا فارغًا مدته {min} دقيقة في هذا الوقت من اليوم هذا الأسبوع.",cal_which:"أي وقت من اليوم يناسبك أكثر؟",
+  cal_hosted:"يعمل تقويم Google في تطبيق ELIA المستضاف الذي يوفر تسجيل الدخول الآمن اللازم. افتحه من هنا، أو اختر الآن الوقت الأنسب لك.",cal_retry_tap:"التقويم جاهز الآن. اضغط على ربط تقويم Google مرة أخرى.",cal_connected:"تم الربط بتقويم Google ({email}). دعني أنظر إلى أسبوعك…",cal_connected_upd:"تم ربط تقويم Google",cal_unavail:"ربط التقويم غير متاح في هذه النسخة من ELIA. اختر الآن الوقت الأنسب لك.",cal_none_free:"لم أجد وقتًا فارغًا مدته {min} دقيقة في هذا الوقت من اليوم هذا الأسبوع.",cal_which:"أي وقت من اليوم يناسبك أكثر؟",
   cal_prop_t:"هذا ما يناسب أسبوعك",cal_prop_sub:"أوقات فراغ في تقويم Google ({email}). كل موعد يتكرر أسبوعيًا لمدة 4 أسابيع.",cal_fewer:"يوجد {n} أوقات فارغة فقط هذا الأسبوع في هذا الوقت من اليوم.",cal_add:"أضف إلى تقويمي",cal_other:"أوقات أخرى",cal_notnow:"ليس الآن",cal_skip:"لا مشكلة. اختر الوقت المناسب وسأتذكره.",
   cal_added:"أضفت {n} جلسات إلى تقويم Google، مع تذكير قبل كل جلسة بعشر دقائق.",cal_added_upd:"أُضيفت {n} جلسات إلى تقويم Google",cal_open:"فتح",cal_partial:"تعذرت إضافة {n}.",cal_expired:"انتهت صلاحية الربط بتقويم Google. اضغط ربط تقويم Google لإعادة الربط.",cal_err:"لم يقبل تقويم Google ذلك، لذلك لم تتم إضافة شيء. يمكنك المحاولة مرة أخرى أو اختيار وقت.",cal_desc:"خُطط مع ELIA من Prime Health. راسل ELIA لتغييره."});
 /* ============ Voice notes: record, send, transcribe ============ */
@@ -2082,21 +2094,41 @@ document.getElementById("audioIn").addEventListener("change",e=>{const f=e.targe
 
 /* ============ Photos: recognized with Claude vision ============ */
 function setMsg(el,html){const ts=el.querySelector(".ts");el.innerHTML=html;if(ts)el.appendChild(ts);msgsEl.scrollTop=msgsEl.scrollHeight}
-async function visionItems(file,forIng){const s=sampleOff?null:await getSample();if(!s)return null;
-  const lim=await s.limits().catch(()=>null);if(!lim||!lim.images)return null;
-  try{const j=await s.json(`A person sent this photo to a health coaching app to show ${forIng?"the food they have at home (fridge or pantry)":"their last meal"}. List the foods or ingredients you can clearly see, using short everyday names in ${LANG_NAME[S.lang]} (for example "grilled chicken", "white rice", "cucumber salad"). Do not guess hidden items. Reply with only JSON: {"food": true|false, "items": [string]}`,{images:f2(file),modelTier:"quick"});
-    if(!j||j.food===false||!Array.isArray(j.items))return[];return j.items.slice(0,10).map(x=>String(x).trim()).filter(Boolean)}
-  catch(e){const c=e&&e.code;if(["not_granted","sampling_disabled","not_declared","capability_disabled","capability_removed","images_unavailable"].includes(c))sampleOff=sampleOff||c!=="images_unavailable";return null}}
-function f2(file){return file}
+/* Ask Claude what is in the photo. Returns {kind:"ok"|"none"|"unavailable"|"error", scene, items}. */
+async function visionItems(file,forIng){const s=sampleOff?null:await getSample();if(!s)return{kind:"unavailable"};
+  const lim=await s.limits().catch(()=>null);if(!lim||!lim.images)return{kind:"unavailable"};
+  const ask=`A person sent this photo to a health coaching app. ${forIng?"They were asked what food they have at home.":"They were asked what they ate at their last meal."}
+First decide what the photo shows:
+- "meal": a plate, bowl, takeaway box or snack that someone is eating or about to eat
+- "fridge": the inside of a fridge, freezer, pantry, cupboard or kitchen shelves
+- "groceries": shopping or packaged foods laid out
+- "other": anything else (people, screens, documents, scenery…)
+Then list the foods or ingredients you can clearly see, using short everyday names in ${LANG_NAME[S.lang]} (for example "grilled chicken", "white rice", "carrots", "eggs", "yogurt"). Read labels when you can. Most visible items first, at most 12. Do not guess hidden items.
+Reply with only JSON: {"scene": "meal"|"fridge"|"groceries"|"other", "items": [string]}`;
+  let lastErr=null;
+  for(let attempt=0;attempt<2;attempt++){
+    try{const j=await s.json(ask,{images:[file],modelTier:"default"});
+      const items=Array.isArray(j&&j.items)?j.items.slice(0,12).map(x=>String(x).trim()).filter(Boolean):[];
+      const scene=["meal","fridge","groceries","other"].includes(j&&j.scene)?j.scene:"meal";
+      return{kind:items.length?"ok":"none",scene,items}}
+    catch(e){lastErr=e;const c=e&&e.code;console.warn("ELIA photo recognition failed",c||e);
+      if(["not_granted","sampling_disabled","not_declared","capability_disabled","capability_removed","images_unavailable"].includes(c)){sampleOff=sampleOff||c!=="images_unavailable";return{kind:"unavailable"}}
+      if(c==="rate_limited")break}}
+  return{kind:"error",code:lastErr&&lastErr.code}}
 async function onPhoto(file){const url=URL.createObjectURL(file);const forIng=S.await==="ing";
   const pel=user(`<img src="${url}" alt="" style="border-radius:8px;max-height:180px;display:block">`);
   if(S.sim){S.rx.turn++;bot(t("vis_sim"));return}
   maybeReact(pel,"",forIng?null:"meals");
   later(()=>new Promise(async res=>{const el=add("",`<span class="ph">${t("ph_vision")}</span><p class="note">${t("vis_looking")}</p>`);
-    const items=await visionItems(file,forIng);
-    if(items===null){setMsg(el,`<p>${forIng?t("vis_unavail_ing"):t("vis_unavail")}</p>`);S.await=forIng?"ing":"meal";res();return}
-    if(!items.length){setMsg(el,`<p>${t("vis_nofood")}</p>`);S.await=forIng?"ing":"meal";res();return}
-    const txt=items.join(", ");setMsg(el,`<span class="ph">${t("ph_vision")}</span><p>${t(forIng?"vision_fridge":"vision_meal",{items:esc(txt)})}</p>`);
+    const v=await visionItems(file,forIng);const back=()=>{S.await=forIng?"ing":"meal";res()};
+    if(v.kind==="unavailable"){setMsg(el,`<p>${forIng?t("vis_unavail_ing"):t("vis_unavail")}</p>`);back();return}
+    if(v.kind==="error"){setMsg(el,`<p>${t("vis_error")}</p>`);back();return}
+    if(v.kind==="none"){setMsg(el,`<p>${t(v.scene==="other"?"vis_other":"vis_nofood")}</p>`);back();return}
+    const txt=v.items.join(", ");
+    if(!forIng&&v.scene!=="meal"){
+      /* a fridge or pantry photo when we asked about a meal: show what's there and ask which of it they ate */
+      setMsg(el,`<span class="ph">${t("ph_vision")}</span><p>${t("vision_fridge_meal",{items:esc(txt)})}</p>`);S.fridgeItems=v.items;S.await="meal";res();return}
+    setMsg(el,`<span class="ph">${t("ph_vision")}</span><p>${t(forIng?"vision_fridge":"vision_meal",{items:esc(txt)})}</p>`);
     replies([[t("yes_right"),()=>forIng?onIng(txt):mealFromText(txt)],[t("fix_it"),()=>{bot(forIng?t("ask_ing"):t("ask_fix"));S.await=forIng?"ing":"meal"}]]);res()}))}
 Object.assign(L.en,{fs_brand:"Face scan",ph_nura:"Powered by your camera",fs_cam_ask:"Allow camera access to begin",fs_noface:"Place your face inside the oval",fs_center:"Center your face in the oval",fs_closer:"Move a little closer",fs_back:"Move back a little",fs_dark:"Find brighter, even light on your face",fs_bright:"Too bright. Avoid strong light behind or above you",fs_still:"Hold still",fs_ok:"Perfect. Hold still…",fs_measuring:"Measuring. Keep still and breathe normally",fs_lost:"We lost your face. Let's start again",fs_analyzing:"Analyzing your results…",
  fs_tip:"Remove glasses and hats, face a window or lamp, and keep your face relaxed. The scan takes 30 seconds.",fs_c_light:"Lighting",fs_c_pos:"Position",fs_c_move:"Movement",
@@ -2105,7 +2137,7 @@ Object.assign(L.en,{fs_brand:"Face scan",ph_nura:"Powered by your camera",fs_cam
  fs_quality:"Signal quality: {q}",q_good:"good",q_fair:"fair",q_poor:"poor",fs_notmeas:"Not measured in this scan",fs_notmeas_d:"Blood pressure, BMI, facial skin age, cardiovascular and metabolic risk scores and vascular capacity come from NuraLogix DeepAffex models, which aren't connected to this scan.",
  fs_saved:"Saved to your health record.",fs_saved_norec:"Saved to your profile; it will appear in My Records when you connect them.",fs_disc:"Camera wellness estimates, not a diagnosis.",fs_src:"ELIA face scan",f_rr:"Breathing rate",f_hrv:"Heart rate variability",
  vn_listening:"Listening…",vn_tr:"Transcript",vn_file_note:"Got your voice note. I can't transcribe recordings in this view, so could you type the main part?",
- vis_looking:"Looking at your photo…",vis_unavail:"I can see your photo but can't identify the food in this view. Could you type what was on the plate?",vis_unavail_ing:"I can see your photo but can't identify the items in this view. Could you type what you have?",vis_nofood:"I couldn't spot any food in that photo. Could you type what you ate?",vis_sim:"Thanks for the photo. Sim works from your answers, so please describe what you're seeing in words.",ph_vision:"Recognized with Claude"});
+ vis_looking:"Looking at your photo…",vis_unavail:"I can see your photo but can't identify the food in this view. Could you type what was on the plate?",vis_unavail_ing:"I can see your photo but can't identify the items in this view. Could you type what you have?",vis_nofood:"I couldn't spot any food in that photo. Could you type what you ate?",vis_sim:"Thanks for the photo. Sim works from your answers, so please describe what you're seeing in words.",ph_vision:"Recognized with Claude",vis_unavail:"I can see your photo, but photo recognition isn't switched on in this version of ELIA. Could you type what you ate?",vis_unavail_ing:"I can see your photo, but photo recognition isn't switched on in this version of ELIA. Could you type what you have?",vis_error:"I couldn't reach photo recognition just now. Could you type what you ate, or try the photo again in a moment?",vis_other:"I couldn't spot any food in that photo. Could you type what you ate?",vision_fridge_meal:"That looks like your fridge or pantry. I can see: {items}. Which of these did you eat today, and roughly how much? Add anything else you had too."});
 Object.assign(L.es,{fs_brand:"Escaneo facial",ph_nura:"Con la cámara de tu teléfono",fs_cam_ask:"Permite el acceso a la cámara para empezar",fs_noface:"Coloca tu cara dentro del óvalo",fs_center:"Centra tu cara en el óvalo",fs_closer:"Acércate un poco",fs_back:"Aléjate un poco",fs_dark:"Busca una luz más clara y pareja en tu cara",fs_bright:"Demasiada luz. Evita luz fuerte detrás o arriba de ti",fs_still:"Quédate quieto",fs_ok:"Perfecto. No te muevas…",fs_measuring:"Midiendo. Quédate quieto y respira normal",fs_lost:"Perdimos tu cara. Empecemos de nuevo",fs_analyzing:"Analizando tus resultados…",
  fs_tip:"Quítate lentes y gorra, mira hacia una ventana o lámpara y relaja la cara. El escaneo dura 30 segundos.",fs_c_light:"Luz",fs_c_pos:"Posición",fs_c_move:"Movimiento",
  fs_nocam_t:"La cámara en vivo no está disponible aquí",fs_nocam_d:"Esta vista no permite la cámara en vivo. Graba un video selfie de 30 segundos (cara centrada, buena luz, sin moverte) o continúa sin el escaneo.",fs_record:"Grabar un video de 30 segundos",fs_skip:"Continuar sin escaneo",fs_processing:"Leyendo tu video…",fs_fail_face:"No encontré una cara en ese video. Intenta de nuevo mirando a la cámara con buena luz.",
@@ -2113,7 +2145,7 @@ Object.assign(L.es,{fs_brand:"Escaneo facial",ph_nura:"Con la cámara de tu tel�
  fs_quality:"Calidad de señal: {q}",q_good:"buena",q_fair:"regular",q_poor:"baja",fs_notmeas:"No medido en este escaneo",fs_notmeas_d:"La presión arterial, el IMC, la edad de la piel, los riesgos cardiovasculares y metabólicos y la capacidad vascular vienen de los modelos DeepAffex de NuraLogix, que no están conectados a este escaneo.",
  fs_saved:"Guardado en tu expediente médico.",fs_saved_norec:"Guardado en tu perfil; aparecerá en Mi expediente cuando lo conectes.",fs_disc:"Estimaciones de bienestar con cámara, no un diagnóstico.",fs_src:"Escaneo facial ELIA",f_rr:"Frecuencia respiratoria",f_hrv:"Variabilidad cardiaca",
  vn_listening:"Escuchando…",vn_tr:"Transcripción",vn_file_note:"Recibí tu nota de voz. No puedo transcribir grabaciones en esta vista, ¿me escribes lo principal?",
- vis_looking:"Revisando tu foto…",vis_unavail:"Veo tu foto, pero no puedo identificar la comida en esta vista. ¿Me escribes qué había en el plato?",vis_unavail_ing:"Veo tu foto, pero no puedo identificar los productos en esta vista. ¿Me escribes qué tienes?",vis_nofood:"No encontré comida en esa foto. ¿Me escribes qué comiste?",vis_sim:"Gracias por la foto. Sim trabaja con tus respuestas, así que describe con palabras lo que notas.",ph_vision:"Reconocido con Claude"});
+ vis_looking:"Revisando tu foto…",vis_unavail:"Veo tu foto, pero no puedo identificar la comida en esta vista. ¿Me escribes qué había en el plato?",vis_unavail_ing:"Veo tu foto, pero no puedo identificar los productos en esta vista. ¿Me escribes qué tienes?",vis_nofood:"No encontré comida en esa foto. ¿Me escribes qué comiste?",vis_sim:"Gracias por la foto. Sim trabaja con tus respuestas, así que describe con palabras lo que notas.",ph_vision:"Reconocido con Claude",vis_unavail:"Veo tu foto, pero el reconocimiento de fotos no está activado en esta versión de ELIA. ¿Me escribes qué comiste?",vis_unavail_ing:"Veo tu foto, pero el reconocimiento de fotos no está activado en esta versión de ELIA. ¿Me escribes qué tienes?",vis_error:"No pude conectar con el reconocimiento de fotos en este momento. ¿Me escribes qué comiste o intentas de nuevo en un momento?",vis_other:"No encontré comida en esa foto. ¿Me escribes qué comiste?",vision_fridge_meal:"Parece tu refri o alacena. Veo: {items}. ¿Cuáles de estos comiste hoy y más o menos cuánto? Agrega cualquier otra cosa que hayas comido."});
 Object.assign(L.ar,{fs_brand:"فحص الوجه",ph_nura:"بكاميرا هاتفك",fs_cam_ask:"اسمح بالوصول إلى الكاميرا للبدء",fs_noface:"ضع وجهك داخل الشكل البيضاوي",fs_center:"وسّط وجهك داخل الشكل البيضاوي",fs_closer:"اقترب قليلًا",fs_back:"ابتعد قليلًا",fs_dark:"ابحث عن إضاءة أقوى ومتساوية على وجهك",fs_bright:"الإضاءة قوية جدًا. تجنب الضوء القوي خلفك أو فوقك",fs_still:"ابقَ ثابتًا",fs_ok:"ممتاز. ابقَ ثابتًا…",fs_measuring:"جارٍ القياس. ابقَ ثابتًا وتنفس بشكل طبيعي",fs_lost:"فقدنا وجهك. لنبدأ من جديد",fs_analyzing:"جارٍ تحليل نتائجك…",
  fs_tip:"انزع النظارة والقبعة، وواجه نافذة أو مصباحًا، وأرخِ وجهك. يستغرق الفحص 30 ثانية.",fs_c_light:"الإضاءة",fs_c_pos:"الوضعية",fs_c_move:"الحركة",
  fs_nocam_t:"الكاميرا المباشرة غير متاحة هنا",fs_nocam_d:"لا تسمح هذه الواجهة بالكاميرا المباشرة. سجّل فيديو سيلفي مدته 30 ثانية (الوجه في المنتصف، إضاءة جيدة، دون حركة)، أو تابع دون فحص.",fs_record:"سجّل فيديو مدته 30 ثانية",fs_skip:"تابع دون فحص",fs_processing:"جارٍ قراءة الفيديو…",fs_fail_face:"لم أتمكن من العثور على وجه في هذا الفيديو. حاول مجددًا مواجهًا الكاميرا في إضاءة جيدة.",
@@ -2121,7 +2153,7 @@ Object.assign(L.ar,{fs_brand:"فحص الوجه",ph_nura:"بكاميرا هات�
  fs_quality:"جودة الإشارة: {q}",q_good:"جيدة",q_fair:"مقبولة",q_poor:"ضعيفة",fs_notmeas:"لم يُقس في هذا الفحص",fs_notmeas_d:"ضغط الدم ومؤشر كتلة الجسم وعمر البشرة ومخاطر القلب والأيض والسعة الوعائية تأتي من نماذج DeepAffex من NuraLogix، وهي غير مرتبطة بهذا الفحص.",
  fs_saved:"حُفظ في سجلك الطبي.",fs_saved_norec:"حُفظ في ملفك؛ وسيظهر في سجلي الطبي عند ربطه.",fs_disc:"تقديرات صحية عامة بالكاميرا، وليست تشخيصًا.",fs_src:"فحص الوجه من ELIA",f_rr:"معدل التنفس",f_hrv:"تقلب نبض القلب",
  vn_listening:"أستمع…",vn_tr:"النص",vn_file_note:"وصلتني رسالتك الصوتية. لا يمكنني تحويل التسجيلات إلى نص في هذه الواجهة، هل يمكنك كتابة الجزء الأهم؟",
- vis_looking:"أنظر إلى صورتك…",vis_unavail:"أرى صورتك لكن لا يمكنني التعرف على الطعام في هذه الواجهة. هل يمكنك كتابة ما كان في الطبق؟",vis_unavail_ing:"أرى صورتك لكن لا يمكنني التعرف على المكونات هنا. هل يمكنك كتابة ما لديك؟",vis_nofood:"لم أجد طعامًا في هذه الصورة. هل يمكنك كتابة ما أكلته؟",vis_sim:"شكرًا على الصورة. يعتمد سيم على إجاباتك، لذا صِف ما تلاحظه بالكلمات.",ph_vision:"تم التعرف عليه عبر Claude"});
+ vis_looking:"أنظر إلى صورتك…",vis_unavail:"أرى صورتك لكن لا يمكنني التعرف على الطعام في هذه الواجهة. هل يمكنك كتابة ما كان في الطبق؟",vis_unavail_ing:"أرى صورتك لكن لا يمكنني التعرف على المكونات هنا. هل يمكنك كتابة ما لديك؟",vis_nofood:"لم أجد طعامًا في هذه الصورة. هل يمكنك كتابة ما أكلته؟",vis_sim:"شكرًا على الصورة. يعتمد سيم على إجاباتك، لذا صِف ما تلاحظه بالكلمات.",ph_vision:"تم التعرف عليه عبر Claude",vis_unavail:"أرى صورتك، لكن التعرف على الصور غير مفعّل في هذه النسخة من ELIA. هل يمكنك كتابة ما أكلته؟",vis_unavail_ing:"أرى صورتك، لكن التعرف على الصور غير مفعّل في هذه النسخة من ELIA. هل يمكنك كتابة ما لديك؟",vis_error:"لم أتمكن من الوصول إلى خدمة التعرف على الصور الآن. هل يمكنك كتابة ما أكلته، أو إعادة إرسال الصورة بعد قليل؟",vis_other:"لم أجد طعامًا في هذه الصورة. هل يمكنك كتابة ما أكلته؟",vision_fridge_meal:"يبدو أن هذه ثلاجتك أو خزانة طعامك. أرى: {items}. أيّ منها أكلت اليوم، وما الكمية تقريبًا؟ أضف أي شيء آخر تناولته أيضًا."});
 
 
 /* ============ Voice mode: talk with ELIA (and Sim) hands-free ============
@@ -2247,17 +2279,26 @@ function addUpdate(fn){S.updates.unshift({date:now(),fn});S.updates=S.updates.sl
 const msgsEl=$("#msgs"),repEl=$("#replies");
 /* Keep the newest message in view: re-pin after buttons appear, cards grow or the panel resizes, unless the reader scrolled up */
 let pinned=true;
-const pinBottom=()=>{msgsEl.scrollTop=msgsEl.scrollHeight};
+/* A message taller than the chat window is held with its top in view, so it can be read from the start; the next message releases it. */
+let holdEl=null;
+const pinBottom=()=>{if(holdEl&&holdEl.isConnected){const top=holdEl.getBoundingClientRect().top-msgsEl.getBoundingClientRect().top+msgsEl.scrollTop-8;msgsEl.scrollTop=Math.min(top,msgsEl.scrollHeight)}else msgsEl.scrollTop=msgsEl.scrollHeight};
+/* Pacing: the next message waits until the previous one has had time to be read (about 230 words a minute). */
+const READ={at:0,ms:0};
+function readMs(el){const words=(el.innerText||"").trim().split(/\s+/).filter(Boolean).length;const extra=el.querySelector(".mq-card,.card,table,svg,.kv")?1500:0;return Math.max(900,Math.min(9000,500+words*260+extra))}
 msgsEl.addEventListener("scroll",()=>{pinned=msgsEl.scrollHeight-msgsEl.scrollTop-msgsEl.clientHeight<90});
 const repin=()=>{if(pinned)requestAnimationFrame(pinBottom)};
 try{new MutationObserver(()=>{pinned=true;repin()}).observe(repEl,{childList:true});new MutationObserver(repin).observe(msgsEl,{childList:true,subtree:true,attributes:true,attributeFilter:["hidden"]});new ResizeObserver(repin).observe(msgsEl)}catch(e){}
 let chain=Promise.resolve(),gen=0;
 const reduced=matchMedia("(prefers-reduced-motion: reduce)").matches;
 function later(fn){const g=gen;chain=chain.then(()=>g===gen?fn():null);return chain}
-function add(cls,html){const d=document.createElement("div");d.className="msg "+cls;d.innerHTML=html+(/sys|sim/.test(cls)?"":`<span class="ts">${fmtTime(now())}</span>`);msgsEl.appendChild(d);pinned=true;pinBottom();requestAnimationFrame(pinBottom);d.querySelectorAll("img").forEach(i=>i.addEventListener("load",repin));if(VM.on&&!/(^|\s)(me|typing|sys|sim|recans)(\s|$)/.test(cls))vmSpeakEl(d);return d}
-function bot(html,o={}){const g=gen;later(()=>new Promise(r=>{const ty=add("typing",'<span class="dots"><i></i><i></i><i></i></span>');ty.querySelector(".ts").remove();setTimeout(()=>{ty.remove();if(g===gen)add((o.cls||""),html);r()},reduced?120:(o.delay??Math.min(1100,450+html.length*2)))}))}
+function add(cls,html){const d=document.createElement("div");d.className="msg "+cls;d.innerHTML=html+(/sys|sim/.test(cls)?"":`<span class="ts">${fmtTime(now())}</span>`);msgsEl.appendChild(d);holdEl=null;if(!/(^|\s)(me|typing)(\s|$)/.test(cls)){READ.at=performance.now();READ.ms=readMs(d);if(d.offsetHeight>msgsEl.clientHeight-48)holdEl=d}pinned=true;pinBottom();requestAnimationFrame(pinBottom);d.querySelectorAll("img").forEach(i=>i.addEventListener("load",repin));if(VM.on&&!/(^|\s)(me|typing|sys|sim|recans)(\s|$)/.test(cls))vmSpeakEl(d);return d}
+function bot(html,o={}){const g=gen;later(()=>new Promise(r=>{
+  const typeMs=reduced?120:(o.delay??Math.min(1100,450+html.length*2));
+  const left=READ.ms-(performance.now()-READ.at);const pause=Math.max(0,left-typeMs);
+  setTimeout(()=>{if(g!==gen){r();return}const ty=add("typing",'<span class="dots"><i></i><i></i><i></i></span>');ty.querySelector(".ts").remove();
+    setTimeout(()=>{ty.remove();if(g===gen){add((o.cls||""),html);if(o.readMs!=null)READ.ms=o.readMs}r()},Math.max(typeMs,left-pause))},pause)}))}
 function sys(html,cls="sys"){later(()=>{add(cls,html)})}
-function user(html){return add("me",html)}
+function user(html){READ.ms=0;return add("me",html)}
 function replies(list){later(()=>setReplies(list))}
 function setReplies(list){repEl.innerHTML="";S.curReplies=list;list.forEach(([label,fn,opts={}])=>{const b=document.createElement("button");b.type="button";b.textContent=label;b.onclick=()=>{clearReplies();S.curReplies=null;if(!opts.silent){const el=user(esc(label));maybeReact(el,label,opts.react||null)}fn()};repEl.appendChild(b)})}
 function clearReplies(){repEl.innerHTML=""}
@@ -2370,7 +2411,7 @@ async function estimateMeal(text){
     catch(e){const c=e&&e.code;if(["not_granted","sampling_disabled","not_declared","capability_disabled","capability_removed"].includes(c))sampleOff=true}}
   const e=PN.estimateFromText(text,S.lang);return e?{items:e.items,unknown:e.unknown,source:"table"}:null}
 function analyzeMeal(){const g=gen,text=S.mealText;
-  bot(`<p>${esc(text.length>80?text.slice(0,80)+"…":text)} 👍</p>`,{delay:400});
+  bot(`<p>${esc(text.length>80?text.slice(0,80)+"…":text)} 👍</p>`,{delay:400,readMs:700});
   later(()=>new Promise(async res=>{if(g!==gen){res();return}const ty=add("typing",'<span class="dots"><i></i><i></i><i></i></span>');const ts=ty.querySelector(".ts");if(ts)ts.remove();
     let est=null;try{est=await estimateMeal(text)}catch(e){}
     if(!reduced)await new Promise(r=>setTimeout(r,250));ty.remove();if(g===gen)renderMeal(text,est);res()}))}

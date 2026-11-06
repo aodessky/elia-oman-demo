@@ -26,6 +26,15 @@ function deviceId() {
   } catch { return crypto.randomUUID(); }
 }
 
+/** The DeepAffex region a device token belongs to (e.g. "na-east"), from its payload. */
+function tokenRegion(token) {
+  try {
+    const p = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    const r = p.rgn || p.Region || p.region;
+    return typeof r === "string" && /^[a-z0-9-]{2,24}$/.test(r) ? r : null;
+  } catch { return null; }
+}
+
 /** Read every point in a DeepAffex result as plain numbers. */
 export function parseResults(r) {
   const m = r.Multiplier || 1, points = {};
@@ -80,6 +89,15 @@ function run(h) {
       if (!r.ok || !tok.token) return fail("token", tok.error || r.status);
     } catch (e) { return fail("token", "network"); }
     if (cancelled) return;
+    // The SDK talks to the regional DeepAffex API straight from the browser. NuraLogix must allow this site's
+    // domain there (CORS). Check once up front, so a blocked domain falls back at once instead of waiting forever.
+    const region = tokenRegion(tok.token);
+    if (region) {
+      try {
+        await fetch(`https://api.${region}.deepaffex.ai/studies/sdkconfig`, { headers: { Authorization: `Bearer ${tok.token}` }, cache: "no-store" });
+      } catch { return fail("prepare", "domain_not_allowed"); }
+      if (cancelled) return;
+    }
     try {
       m = await Measurement.init({ mediaElement: h.mediaElement, assetFolder: "/dfx-assets", metrics: false, mirrorVideo: true, displayMediaStream: true });
     } catch (e) { return fail("assets", String(e && e.message || e)); }
@@ -124,7 +142,10 @@ function run(h) {
     } catch (e) { return fail("assets", String(e && e.message || e)); }
     if (cancelled) return cleanup();
     // Validate the token while the camera opens, so the member sees themselves sooner.
-    const prepared = m.prepare(tok.token, tok.refreshToken, tok.studyId).then((ok) => ok, () => false);
+    const prepared = Promise.race([
+      m.prepare(tok.token, tok.refreshToken, tok.studyId).then((ok) => ok, () => false),
+      new Promise((res) => setTimeout(() => res(false), 20_000)),
+    ]);
     h.onStage("camera");
     try {
       cam = CameraController.init();
