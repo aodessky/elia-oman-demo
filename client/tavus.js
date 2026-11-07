@@ -63,6 +63,9 @@ async function pollTurns(id) {
 }
 function setMic(on) { if (call) call.setLocalAudio(!!on); }
 api.setMic = setMic;
+/* Text as if the member had said it (typing during a call, and tests). Full pipeline only. */
+function respond(text) { if (!call || !conv) return false; call.sendAppMessage({ message_type: "conversation", event_type: "conversation.respond", conversation_id: conv.conversation_id, properties: { text: String(text) } }, "*"); return true; }
+api.respond = respond;
 function say(text) { if (!call || !conv) return false; call.sendAppMessage(echoMsg(text), "*"); return true; }
 function interrupt() { if (call && conv) call.sendAppMessage({ message_type: "conversation", event_type: "conversation.interrupt", conversation_id: conv.conversation_id }, "*"); }
 async function stop() {
