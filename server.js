@@ -418,6 +418,19 @@ async function liveStart(req, res) {
   if (!allowed(clientIp(req), "live", 20)) return send(res, 429, { error: "rate_limited" });
   let b = {};
   try { b = await readJson(req, 64 * 1024); } catch { return send(res, 400, { error: "bad_request" }); }
+  // diagnostic: which audio/live models can this key actually see?
+  if (b.probe === true) {
+    try {
+      const pr = await fetch("https://api.openai.com/v1/models", { headers: { Authorization: `Bearer ${OPENAI_KEY}` } });
+      const pj = await pr.json().catch(() => ({}));
+      const names = ((pj && pj.data) || []).map((m) => m.id);
+      const one = await fetch(`https://api.openai.com/v1/models/${encodeURIComponent(LIVE_MODEL)}`, { headers: { Authorization: `Bearer ${OPENAI_KEY}` } });
+      const oj = await one.json().catch(() => ({}));
+      return send(res, 200, { status: pr.status, total: names.length,
+        audio: names.filter((n) => /live|realtime|audio|tts|whisper/.test(n)).sort(),
+        model: LIVE_MODEL, modelStatus: one.status, modelBody: (oj.error && oj.error.message) || oj.id || null });
+    } catch (e) { return send(res, 200, { probeError: e.message }); }
+  }
   const lang = ["en", "es", "ar"].includes(b.lang) ? b.lang : "en";
   if (process.env.LIVE_MOCK) return send(res, 200, { id: "live-mock-" + Date.now(), mock: true, model: LIVE_MODEL, voice: LIVE_VOICE });
   if (typeof b.sdp !== "string" || !/^v=0/m.test(b.sdp)) return send(res, 400, { error: "bad_sdp" });
