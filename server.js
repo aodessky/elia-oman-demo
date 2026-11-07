@@ -259,16 +259,24 @@ async function ttsCall(req, res) {
   } catch (e) { console.error("Cartesia unreachable", e.message); return send(res, 502, { error: "unreachable" }); }
 }
 
-/* ───────────── Talking avatar (Tavus, echo mode) ─────────────
-   Voice mode shows ELIA as a Tavus face that speaks ELIA's own replies with lip sync. Echo mode means Tavus doesn't run its
-   own LLM or speech recognition: the page sends each reply as text (conversation.echo) and ELIA keeps the conversation.
+/* ───────────── Talking avatar (Tavus) ─────────────
+   Voice mode shows ELIA as a Tavus face. Two ways to run it:
+   - "duplex" (default): Tavus's full pipeline listens all the time, decides turns and lets the member interrupt (Sparrow turn
+     detection), and speaks with the Cartesia voice. Its "LLM" is this server (an OpenAI-compatible chat endpoint). Each turn the
+     member's words are handed to the member's own page, which runs ELIA's dialog (buttons, meal scoring, Claude) and returns the
+     reply; the server streams it back to Tavus. So voice and chat are the same conversation.
+   - "echo": the page sends each reply as text and Tavus only animates it (no Tavus listening). Used when TAVUS_MODE=echo.
    TAVUS_API_KEY stays here. The face is TAVUS_FACE_ID, or the account's own face whose name contains "Elia". */
 const TAVUS_KEY = (process.env.TAVUS_API_KEY || "").trim();
 const TAVUS_API = "https://tavusapi.com/v2";
+const TAVUS_MODE = process.env.TAVUS_MODE === "echo" ? "echo" : "duplex";
+const TAVUS_LLM_SECRET = (process.env.TAVUS_LLM_SECRET || crypto.randomBytes(24).toString("hex"));
 const tavusHeaders = () => ({ "Content-Type": "application/json", "x-api-key": TAVUS_KEY });
 let tavusFace = process.env.TAVUS_FACE_ID || null, tavusFaceName = null, tavusPal = process.env.TAVUS_PAL_ID || null;
-const tavusConvs = new Set();
-async function tavusSetup() {
+const tavusKeys = new Map(); // our own key (in the conversational context) -> conversation_id
+const tavusConvs = new Map(); // conversation_id -> { sid, turns: [], waiter, replies: Map(turnId -> {resolve}) }
+function publicBase(req) { const proto = (req.headers["x-forwarded-proto"] || "https").split(",")[0].trim(); return `${proto}://${req.headers.host}`; }
+async function tavusSetup(req) {
   if (!tavusFace) {
     const r = await fetch(`${TAVUS_API}/faces?face_type=user&limit=100&verbose=true`, { headers: tavusHeaders() });
     const j = await r.json().catch(() => ({}));
@@ -280,40 +288,107 @@ async function tavusSetup() {
     console.log(`Tavus face: ${tavusFaceName} (${tavusFace})`);
   }
   if (!tavusPal) {
-    // Echo mode, voiced by the same Cartesia voice as the rest of ELIA when a Cartesia key is set; otherwise the face's own voice.
-    const base = { pal_name: "ELIA (echo)", pipeline_mode: "echo", default_face_id: tavusFace };
-    const tries = TTS_KEY ? [{ ...base, layers: { tts: { tts_engine: "cartesia", api_key: TTS_KEY, external_voice_id: TTS_VOICES.elia } } }, base] : [base];
+    const tts = TTS_KEY ? { tts_engine: "cartesia", api_key: TTS_KEY, external_voice_id: TTS_VOICES.elia } : undefined;
+    const bodies = [];
+    if (TAVUS_MODE === "duplex") {
+      const full = { pal_name: "ELIA", pipeline_mode: "full", default_face_id: tavusFace,
+        system_prompt: "You are ELIA, Prime Health's personal health strategist. Speak warmly and briefly. Say exactly what the ELIA app gives you.",
+        layers: { llm: { model: "elia", base_url: `${publicBase(req)}/api/tavus/llm`, api_key: TAVUS_LLM_SECRET, speculative_inference: false },
+          conversational_flow: { turn_detection_model: "sparrow-2", turn_taking_patience: "medium", pal_interruptibility: "high" },
+          perception: { perception_model: "off" }, ...(tts ? { tts } : {}) } };
+      bodies.push(full, { ...full, layers: { ...full.layers, tts: undefined } });
+    }
+    const echo = { pal_name: "ELIA (echo)", pipeline_mode: "echo", default_face_id: tavusFace };
+    bodies.push(tts ? { ...echo, layers: { tts } } : echo, echo);
     let last = "";
-    for (const body of tries) {
+    for (const body of bodies) {
       const r = await fetch(`${TAVUS_API}/pals`, { method: "POST", headers: tavusHeaders(), body: JSON.stringify(body) });
       const j = await r.json().catch(() => ({}));
-      if (r.ok && (j.pal_id || j.persona_id)) { tavusPal = j.pal_id || j.persona_id; console.log(`Tavus echo PAL ${tavusPal}${body.layers ? " with Cartesia voice" : ""}`); break; }
-      last = `${r.status} ${j.message || j.error || ""}`;
+      if (r.ok && (j.pal_id || j.persona_id)) { tavusPal = j.pal_id || j.persona_id; tavusPalMode = body.pipeline_mode; console.log(`Tavus PAL ${tavusPal} (${body.pipeline_mode}${body.layers && body.layers.tts ? ", Cartesia voice" : ""})`); break; }
+      last = `${r.status} ${j.message || j.error || ""}`; console.warn("Tavus PAL create failed:", last);
     }
     if (!tavusPal) throw new Error("pal " + last);
   }
 }
+let tavusPalMode = process.env.TAVUS_PAL_MODE || TAVUS_MODE;
 async function tavusStart(req, res) {
   if (!TAVUS_KEY) return send(res, 503, { error: "not_configured" });
   if (!sameOrigin(req)) return send(res, 403, { error: "origin" });
   if (!allowed(clientIp(req), "tavus", 15)) return send(res, 429, { error: "rate_limited" });
+  let b = {};
+  try { b = await readJson(req, 4096); } catch {}
   try {
-    await tavusSetup();
+    const convKey = "k" + crypto.randomBytes(8).toString("hex");
+    if (process.env.TAVUS_MOCK) { const id = "mock-" + convKey; tavusConvs.set(id, { turns: [], waiter: null, replies: new Map(), at: Date.now(), key: convKey }); tavusKeys.set(convKey, id); return send(res, 200, { conversation_id: id, conversation_url: "mock://" + id, face: "mock", mode: "duplex", llmSecret: TAVUS_LLM_SECRET }); }
+    await tavusSetup(req);
     const r = await fetch(`${TAVUS_API}/conversations`, { method: "POST", headers: tavusHeaders(), body: JSON.stringify({
       face_id: tavusFace, pal_id: tavusPal, conversation_name: "ELIA voice mode",
-      properties: { max_call_duration: 900, participant_left_timeout: 5, participant_absent_timeout: 60 } }) });
+      ...(tavusPalMode === "full" || tavusPalMode === "duplex" ? { custom_greeting: String(b.greeting || "").slice(0, 300) || "I'm listening. Go ahead.", conversational_context: `elia_conversation:${convKey} ` + String(b.context || "").slice(0, 2000) } : {}),
+      properties: { max_call_duration: 900, participant_left_timeout: 5, participant_absent_timeout: 60, languages: [b.lang === "es" ? "spanish" : b.lang === "ar" ? "arabic" : "english"] } }) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.conversation_url) { console.error("Tavus conversation failed", r.status, j.message || j.error || ""); return send(res, 502, { error: "upstream", status: r.status }); }
-    tavusConvs.add(j.conversation_id);
-    return send(res, 200, { conversation_id: j.conversation_id, conversation_url: j.conversation_url, face: tavusFaceName });
+    const rec = { turns: [], waiter: null, replies: new Map(), at: Date.now(), key: convKey };
+    tavusConvs.set(j.conversation_id, rec); tavusKeys.set(convKey, j.conversation_id);
+    return send(res, 200, { conversation_id: j.conversation_id, conversation_url: j.conversation_url, face: tavusFaceName, mode: tavusPalMode === "echo" ? "echo" : "duplex" });
   } catch (e) { console.error("Tavus setup failed", e.message); return send(res, 502, { error: e.message === "no_face" ? "no_face" : "setup" }); }
+}
+/* Tavus → this server: the member just spoke. Hand the words to the member's page, stream ELIA's reply back. */
+async function tavusLlm(req, res) {
+  const auth = req.headers.authorization || "";
+  if (auth !== `Bearer ${TAVUS_LLM_SECRET}` && req.headers["x-api-key"] !== TAVUS_LLM_SECRET) return send(res, 401, { error: "auth" });
+  let b;
+  try { b = await readJson(req, 256 * 1024); } catch { return send(res, 400, { error: "bad_request" }); }
+  const msgs = Array.isArray(b.messages) ? b.messages : [];
+  // Which conversation? Tavus sends the id in a request header (name undocumented), so look for a known id in any header,
+  // then in the system context (we put "elia_conversation:<id>" there), then fall back to the only live conversation.
+  let convId = null;
+  for (const v of Object.values(req.headers)) { const str = String(v); for (const id of tavusConvs.keys()) if (str.includes(id)) { convId = id; break; } if (convId) break; }
+  if (!convId) { const sys = msgs.filter((m) => m.role === "system").map((m) => (typeof m.content === "string" ? m.content : "")).join("\n"); const m = sys.match(/elia_conversation:(k[a-f0-9]{16})/); if (m && tavusKeys.has(m[1])) convId = tavusKeys.get(m[1]); }
+  if (!convId && tavusConvs.size === 1) convId = [...tavusConvs.keys()][0];
+  const c = convId && tavusConvs.get(convId);
+  if (!c) { console.warn("Tavus LLM call: no matching conversation; headers", Object.keys(req.headers).join(",")); return send(res, 404, { error: "no_conversation" }); }
+  const lastUser = [...msgs].reverse().find((m) => m.role === "user");
+  const text = lastUser ? (typeof lastUser.content === "string" ? lastUser.content : (lastUser.content || []).map((x) => x.text || "").join(" ")) : "";
+  const turnId = crypto.randomUUID();
+  const reply = await new Promise((resolve) => {
+    c.replies.set(turnId, { resolve, at: Date.now() });
+    c.turns.push({ id: turnId, text: text.replace(/<user_visual_analysis>[\s\S]*?<\/user_visual_analysis>/g, "").trim() });
+    if (c.waiter) { const w = c.waiter; c.waiter = null; w(); }
+    setTimeout(() => { if (c.replies.has(turnId)) { c.replies.delete(turnId); resolve(""); } }, 25000);
+  });
+  const id = "chatcmpl-" + turnId.slice(0, 8), created = Math.floor(Date.now() / 1000);
+  if (b.stream === false) return send(res, 200, { id, object: "chat.completion", created, model: "elia", choices: [{ index: 0, message: { role: "assistant", content: reply }, finish_reason: "stop" }] });
+  res.writeHead(200, { ...ISOLATION, "Content-Type": "text/event-stream", "Cache-Control": "no-store", Connection: "keep-alive" });
+  const chunk = (delta, fin) => res.write(`data: ${JSON.stringify({ id, object: "chat.completion.chunk", created, model: "elia", choices: [{ index: 0, delta, finish_reason: fin || null }] })}\n\n`);
+  chunk({ role: "assistant", content: "" });
+  // sentence by sentence, so Tavus can start speaking before the whole reply is out
+  for (const part of reply.match(/[^.!?؟。]+[.!?؟。]*\s*/g) || [reply]) chunk({ content: part });
+  chunk({}, "stop"); res.write("data: [DONE]\n\n"); res.end();
+}
+/* page ↔ server: long-poll for the member's words, then post ELIA's reply */
+async function tavusTurns(req, res, convId) {
+  if (!sameOrigin(req)) return send(res, 403, { error: "origin" });
+  const c = tavusConvs.get(convId);
+  if (!c) return send(res, 404, { error: "no_conversation" });
+  if (!c.turns.length) await new Promise((r) => { c.waiter = r; const t = setTimeout(() => { if (c.waiter === r) { c.waiter = null; r(); } }, 20000); req.on("close", () => { clearTimeout(t); if (c.waiter === r) { c.waiter = null; r(); } }); });
+  const turns = c.turns.splice(0); return send(res, 200, { turns });
+}
+async function tavusReply(req, res, convId) {
+  if (!sameOrigin(req)) return send(res, 403, { error: "origin" });
+  const c = tavusConvs.get(convId);
+  if (!c) return send(res, 404, { error: "no_conversation" });
+  let b = {};
+  try { b = await readJson(req, 64 * 1024); } catch { return send(res, 400, { error: "bad_request" }); }
+  const w = c.replies.get(String(b.turn || ""));
+  if (w) { c.replies.delete(String(b.turn)); w.resolve(String(b.text || "").slice(0, 1500)); }
+  return send(res, 200, { ok: true });
 }
 async function tavusEnd(req, res) {
   let b = {};
   try { b = await readJson(req, 4096); } catch {}
   const id = String(b.conversation_id || "");
   if (!TAVUS_KEY || !tavusConvs.has(id)) return send(res, 200, { ok: true });
-  tavusConvs.delete(id);
+  const c = tavusConvs.get(id); for (const w of c.replies.values()) w.resolve(""); if (c.waiter) c.waiter(); tavusKeys.delete(c.key); tavusConvs.delete(id);
   try { await fetch(`${TAVUS_API}/conversations/${encodeURIComponent(id)}/end`, { method: "POST", headers: tavusHeaders() }); } catch {}
   return send(res, 200, { ok: true });
 }
@@ -329,6 +404,9 @@ const server = http.createServer(async (req, res) => {
   if (p === "/api/tts" && req.method === "POST") return ttsCall(req, res);
   if (p === "/api/tavus/start" && req.method === "POST") return tavusStart(req, res);
   if (p === "/api/tavus/end" && req.method === "POST") return tavusEnd(req, res);
+  if (p === "/api/tavus/llm/chat/completions" && req.method === "POST") return tavusLlm(req, res);
+  { const m = p.match(/^\/api\/tavus\/turns\/([A-Za-z0-9_-]+)$/); if (m && req.method === "GET") return tavusTurns(req, res, m[1]); }
+  { const m = p.match(/^\/api\/tavus\/reply\/([A-Za-z0-9_-]+)$/); if (m && req.method === "POST") return tavusReply(req, res, m[1]); }
   if (p === "/api/google/auth" && req.method === "GET") return googleAuth(req, res, u.searchParams);
   if (p === "/api/google/callback" && req.method === "GET") return googleCallback(req, res, u.searchParams);
   if (p.startsWith("/api/google/") && req.method === "POST") return googleApi(req, res, p.slice("/api/google/".length));

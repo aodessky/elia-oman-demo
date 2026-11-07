@@ -70,10 +70,20 @@ Set `CARTESIA_API_KEY` on the web service. Voice mode then reads ELIA's messages
 
 Optional: `CARTESIA_VOICE_ID` (ELIA's voice, default Skylar `db6b0ed5-d5d3-463d-ae85-518a07d3c2b4`), `CARTESIA_VOICE_ID_ES` / `CARTESIA_VOICE_ID_AR` (a different voice per language), `CARTESIA_VOICE_ID_SIM` (Sim, default Daniel), `CARTESIA_MODEL`, `CARTESIA_VERSION` (default `2026-08-14`). Limit: 400 requests per IP per hour.
 
-## Talking avatar (Tavus)
-Set `TAVUS_API_KEY` on the web service. Voice mode then shows ELIA as a Tavus face that speaks ELIA's replies with lip sync.
-It uses Tavus echo mode: the page sends each reply as text (`conversation.echo`), so ELIA's own dialog stays in charge and the
-page keeps its own speech recognition. The server picks your own Tavus face whose name contains "Elia" (or `TAVUS_FACE_ID`),
-creates an echo-mode PAL once (or uses `TAVUS_PAL_ID`), voiced by the Cartesia voice when `CARTESIA_API_KEY` is set, and
-ends each conversation when voice mode closes (15-minute cap, 15 starts per IP per hour). Without the key, voice mode shows the animated orb.
+## Talking avatar and two-way voice (Tavus)
+Set `TAVUS_API_KEY` on the web service. Voice mode then shows ELIA as a Tavus face and runs a real two-way conversation:
+Tavus's full pipeline listens through the microphone, decides turns and lets the member interrupt (Sparrow-2 turn detection),
+and speaks with the Cartesia voice (`CARTESIA_API_KEY`). Its "LLM" is this server: `POST /api/tavus/llm/chat/completions` is an
+OpenAI-compatible streaming endpoint (secured with `TAVUS_LLM_SECRET`, auto-generated if unset) that hands each turn to the
+member's own page (`GET /api/tavus/turns/:id` long-poll, `POST /api/tavus/reply/:id`), so the voice conversation is ELIA's own
+dialog: buttons picked by meaning, meal scoring, Claude answers. The server picks your face whose name contains "Elia" (or
+`TAVUS_FACE_ID`), creates the PAL once (or `TAVUS_PAL_ID`; set `TAVUS_PAL_MODE=echo` if that PAL is echo mode), and ends each
+conversation when voice mode closes (15-minute cap, 15 starts per IP per hour). `TAVUS_MODE=echo` falls back to echo mode, where
+the page keeps its own speech recognition and Tavus only animates the replies. Without the key, voice mode uses Cartesia and the orb.
 The page is served with `Cross-Origin-Embedder-Policy: credentialless` so it stays cross-origin isolated (NuraLogix SDK) while loading the Daily call library.
+
+## Movement (ELIA Movement engine v174)
+The movement step runs Prime's own engine package (`elia-movement-engine.zip`, bundled unchanged into the page as `EliaMovement`):
+safety first (four questions or the face scan), a starter plan at once, one-tap gates (fitness, time, motivation, place), week 1
+steps and movement snacks with the engine's moves and reps, the habit anchor, the first snack with its done moment, and the
+score explained (30% steps, 55% cardio, 15% strength; first score after week 1; health minutes for Amber users).
