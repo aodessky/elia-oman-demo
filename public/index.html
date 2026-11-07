@@ -231,6 +231,7 @@ h2,h3,h4,.big b,.brand b{font-family:var(--f-display)}
 .mq-items{display:flex;flex-wrap:wrap;gap:5px;margin:2px 0 0;padding:0;list-style:none}
 .mq-items li{font-size:12px;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:2px 9px}
 .mq-items li span{color:var(--muted)}
+.ins-rows{display:flex;flex-direction:column;gap:8px}.ins-rows li{display:flex;flex-direction:column;gap:1px;font-size:13.5px;line-height:1.4}.ins-rows li b{font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}.ins-actions{display:flex;gap:8px;flex-wrap:wrap}
 .mq-note{background:var(--mq-improve-bg);border-radius:12px;padding:10px 12px;margin:0;font-size:13.5px;line-height:1.45}
 .mq-tips p{margin:0 0 6px}.mq-tips p:last-child{margin:0}
 
@@ -828,6 +829,7 @@ li.wc-scope{cursor:default}
         <button data-tab="files"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><span data-t="hq_files">My Files</span></button>
         <button data-tab="records"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M12 8v6M9 11h6M8 17h8"/></svg><span data-t="hq_records">My Records</span></button>
         <button data-tab="devices"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="3"/><path d="M9 6V2.5h6V6M9 18v3.5h6V18M9.5 12h1.5l1-2 1.5 4 1-2h1"/></svg><span data-t="hq_devices">My Devices</span></button>
+        <button data-tab="insurance"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 4.5 5.5v6c0 4.6 3.2 8.6 7.5 9.9 4.3-1.3 7.5-5.3 7.5-9.9v-6z"/><path d="M12 8.5v6M9 11.5h6"/></svg><span data-t="hq_ins">My Insurance</span></button>
         <button data-tab="care"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/><path d="M3.5 12h4l2-3 3 6 2-3h6"/></svg><span data-t="hq_care">My Care</span></button>
         <div class="auth"><span class="uav" id="uAv">M</span><span><b id="uName">Member</b><small data-t="hq_signed">Signed in</small></span></div>
       </nav>
@@ -1388,7 +1390,7 @@ function simEnd(){S.sim=null;setSimHeader(false);const prev=S.simPrev,pr=S.simPr
   const ASK={name:"ask_name",age:"ask_age",hw:"ask_hw",meal:"ask_meal",allergy:"ask_allergy",injury:"ask_inj",ing:"ask_ing",injury_other:"ask_inj_other"};
   if(prev){S.await=prev;bot(t("tri_back_to")+(ASK[prev]?" "+t(ASK[prev],{name:esc(S.name)}):""))}
   else if(pr&&pr.length)bot(t("tri_back_to"));
-  later(()=>{if(S.sim)return;if(pr&&pr.length){repEl.innerHTML="";pr.forEach(b=>repEl.appendChild(b))}else if(S.coreDone)coreReplies();else clearReplies()})}
+  later(()=>{if(S.sim)return;if(S.insPending&&!prev){const f=S.insPending;S.insPending=null;S.simPrevKeep=pr;f();return}S.insPending=null;if(pr&&pr.length){repEl.innerHTML="";pr.forEach(b=>repEl.appendChild(b))}else if(S.coreDone)coreReplies();else clearReplies()})}
 /* rendering */
 function simBubble(html,typing,cls){const g=gen;later(()=>new Promise(r=>{const ty=add("agent typing",'<span class="dots"><i></i><i></i><i></i></span>');const ts=ty.querySelector(".ts");if(ts)ts.remove();
   setTimeout(()=>{ty.remove();if(g===gen)add("agent "+(cls||""),html);r()},reduced?100:Math.max(350,Math.min(1500,typing||700)))}))}
@@ -1403,7 +1405,8 @@ function simRender(m,typing){
   const html=m.kind==="context"?simContext(m.profile):m.kind==="care_card"?simCare(m.result):m.kind==="emergency_card"?simEmergencyCard(m.result,m.number):m.kind==="out_of_scope"?simOos(m.result):m.kind==="facility_results"?simFacilities(m):"";
   if(!html)return;
   simBubble(html,typing,"wide card-msg");
-  if(m.kind==="care_card"||m.kind==="emergency_card"||m.kind==="out_of_scope")run(()=>simRecord(m))}
+  if(m.kind==="care_card"||m.kind==="emergency_card"||m.kind==="out_of_scope")run(()=>simRecord(m));
+  if(m.kind==="care_card"||m.kind==="emergency_card")run(()=>insAfterCare(m))}
 function meter(l){return`<span class="meter" aria-hidden="true">${[1,2,3,4,5].map(i=>`<i class="${i<=l?"on":""}"></i>`).join("")}</span>`}
 function simFoot(r){return`<div class="simfoot"><span>${SU("demoResult")}</span><span class="mono" dir="ltr" title="${esc(SU("decidedBy"))}">${esc(String(r.ruleId).replace("EMERGENCY:","EMG:"))} · v${esc(r.pathwayVersion||r.protocolVersion||"")}</span></div>`}
 function simList(xs,cls){return`<ul class="${cls||"plain"}">${xs.map(x=>`<li>${esc(sl(x))}</li>`).join("")}</ul>`}
@@ -1670,8 +1673,8 @@ function recConnectedMsg(){const R=S.record;if(!R)return;const act=recActive(R);
   const food=R.allergies.filter(a=>a.category[0]==="food");if(food.length)bot(t("rec_food_note",{a:esc(food.map(a=>a.code.text.toLowerCase()).join(", "))}));
   bot(t("rec_ask_hint"))}
 /* onboarding question + offer when someone asks before connecting */
-function askRecords(){S.recAsked=true;if(S.record){askMeal();return}bot(t("rec_q"));
-  replies([[t("rec_yes"),()=>openConnect(()=>{recConnectedMsg();askMeal()},()=>{bot(t("rec_skip_ok"));askMeal()})],[t("rec_no"),()=>{setFact("rec",{k:"rec_not"},"src_chat","cf_declined");bot(t("rec_skip_ok"));askMeal()}]])}
+function askRecords(){S.recAsked=true;if(S.record){askInsurance();return}bot(t("rec_q"));
+  replies([[t("rec_yes"),()=>openConnect(()=>{recConnectedMsg();askInsurance()},()=>{bot(t("rec_skip_ok"));askInsurance()})],[t("rec_no"),()=>{setFact("rec",{k:"rec_not"},"src_chat","cf_declined");bot(t("rec_skip_ok"));askInsurance()}]])}
 function recOffer(){const keep=[...repEl.children];bot(t("rec_offer"));
   replies([[t("rec_yes"),()=>openConnect(()=>{recConnectedMsg();restore()},restore)],[t("later"),restore]]);
   function restore(){later(()=>{repEl.innerHTML="";keep.forEach(b=>repEl.appendChild(b));if(!keep.length&&S.coreDone)coreReplies()})}}
@@ -2989,6 +2992,193 @@ document.addEventListener("click",e=>{const g=e.target.closest&&e.target;if(!g)r
   if(g.closest("[data-wear='keep']")){S.wearOff=null;renderHQ();return}
   const of2=g.closest("[data-wear-off2]");if(of2){const id=of2.dataset.wearOff2,d=wDev(id);delete S.wear[id];S.wearOff=null;addUpdate(()=>t("dev_disconnected",{name:wName(d)}));renderHQ();return}});
 
+/* ============ Insurance ============ */
+/* ============ Health insurance (Liva Sahatuna Individual Medical, demo Table of Benefits) ============
+   The booklet (29 pages) sets the rules: designated providers with direct billing, pre-authorisation per Annexure I, emergency without
+   pre-auth but notified within 48 h, 12-month wait for listed conditions, general exclusions. The booklet carries no Table of Benefits, so
+   the limits, co-pays and typical prices below are invented for the demo and marked as such on screen. Amounts are Omani rials (OMR). */
+const INS_PLAN={insurer:"Liva Insurance SAOC",product:"Sahatuna Individual Medical",plan:"Silver",band:"B",helpline:"+968 2476 6800",email:"info.om@livainsurance.com",
+  period:{from:"2026-03-01",to:"2027-02-28"},annualLimit:10000,annualUsed:640,
+  inpatient:{pct:100,deductible:0,room:"semi",preauth:true},daycare:{pct:100,preauth:true},
+  outpatient:{opted:true,sublimit:1500,used:215,consultCopay:20,pharmacyCopay:20,diagCopay:20,deductible:0},
+  emergency:{pct:100,anyProvider:true,notifyHours:48},nonDesignated:{pct:70},
+  dental:false,optical:false,maternity:false,waitMonths:12,territory:"Oman",abroadEmergency:0,
+  price:{gp:15,specialist:25,sameDay:30,ed:60,edStay:150,pharmacy:12,imaging:45,labs:20},
+  preauthList:["Inpatient admission","Day care procedures","Outpatient surgery","MRI, CT, mammogram, Doppler, bone density","Endoscopy","Echo, stress test, Holter, ambulatory BP","Oncology investigations","Hormone and vitamin tests","Physiotherapy","Home nursing","Medication beyond 30 days"],
+  exclusions:["Pre-existing and chronic conditions (first policy year)","Dental, optical and maternity (not opted)","Mental health, anxiety, insomnia and eating disorders","Obesity and weight-control programmes","Routine check-ups, vaccinations, vitamins and tonics","Alternative medicine (chiropractic, osteopathy, Chinese medicine)","Cosmetic treatment","Hazardous sports injuries","Home visits and telephone consultations","Hearing aids, CPAP, glasses and medical appliances"]};
+const INS_RE=/\b(insur|polic(?:y|ies)|cover(?:ed|age|s)?\b|co-?pay|deductible|excess|claim|liva|sahatuna|pre-?auth|premium|network|designated|reimburs|benefit|sub-?limit|annual limit)|seguro|p[oó]liza|cobert|copago|deducible|reclam|تأمين|وثيقة|تغطية|مطالبة|ليفا/i;
+const INS_EXCL=[[/anxi|depress|panic|stress|insomnia|sleep(?:less)?|mental|eating disorder|anorex|bulim|psych/i,"mental"],[/tooth|teeth|dental|gum|molar|diente|muela|dental|سن|أسنان/i,"dental"],[/eye ?test|glasses|spectacle|contact lens|lentes|نظارة/i,"optical"],[/pregnan|maternity|embaraz|حامل|حمل/i,"maternity"],[/cosmetic|botox|est[eé]tic|تجميل/i,"cosmetic"],[/scuba|parachut|motor ?rac|climb|hang-?glid/i,"hazard"]];
+const insDate=x=>{const [y,m,d]=String(x).split("-").map(Number);return new Date(y,m-1,d).toLocaleDateString(LOCALE[S.lang],{year:"numeric",month:"short",day:"numeric"})};
+const omr=n=>`OMR ${Number(n).toLocaleString(LOCALE[S.lang]||"en",{maximumFractionDigits:n%1?2:0})}`;
+const insOn=()=>!!(S.ins&&S.ins.policy);
+/* ---- onboarding step ---- */
+function askInsurance(next){if(next)S.insNext=next;if(insOn()){insNext();return}S.insAsked=true;bot(t("ins_q"));
+  replies([[t("ins_yes"),()=>{bot(t("ins_insurer_q"));run(()=>S.await="ins_insurer");replies([[t("ins_liva"),()=>insSetInsurer("Liva Insurance")],[t("ins_other"),()=>{bot(t("ins_type_insurer"));run(()=>S.await="ins_insurer")}]])},{react:"benefits"}],
+    [t("ins_no"),()=>{S.ins={none:true};setFact("ins",{k:"ins_none"},"src_chat","cf_conf");bot(t("ins_no_ok"));insNext()}],[t("later"),()=>{bot(t("ins_later_ok"));insNext()}]])}
+function insSetInsurer(name){S.await=null;clearReplies();S.ins=S.ins||{};S.ins.insurer=name;bot(t("ins_policy_q",{ins:esc(name)}));run(()=>S.await="ins_policy")}
+function onInsurer(x){const n=x.replace(/^(?:it'?s|with|i'?m with|es|con)\s+/i,"").trim().slice(0,60);if(n.length<2){bot(t("ins_type_insurer"));return}insSetInsurer(/liva|سahat|sahatuna|ليفا/i.test(n)?"Liva Insurance":n)}
+function onPolicy(x){const m=x.match(/[A-Za-z0-9][A-Za-z0-9\-\/ ]{4,}[A-Za-z0-9]/);if(!m){bot(t("ins_policy_bad"));return}S.await=null;clearReplies();insActivate(m[0].trim().toUpperCase())}
+/* The demo maps any insurer and policy number to the example Sahatuna plan, as if looked up with the insurer */
+function insActivate(policy){S.ins={...(S.ins||{}),policy,memberId:"M-"+policy.replace(/\D/g,"").slice(-6).padStart(6,"7"),plan:INS_PLAN,added:now(),preauths:[]};
+  setFact("ins",{fn:()=>`${S.ins.insurer||INS_PLAN.insurer} · ${t("ins_plan_name")} · ${S.ins.policy}`},"src_chat","cf_conf");
+  addFile({id:"insurance",type:"ins",title:()=>t("file_ins"),body:insFileHTML,link:"insurance"});addUpdate(()=>t("ins_added_upd"));renderHQ();flashHQ();
+  bot(t("ins_found",{plan:t("ins_plan_name")}),{delay:900});bot(insSummaryCard(),{cls:"wide",delay:700});bot(t("ins_how"),{delay:400});insNext()}
+function insNext(){const n=S.insNext;S.insNext=null;if(n)later(n);else if(S.coreDone)later(coreReplies);else later(askMeal)}
+function insSummaryCard(){const P=INS_PLAN,o=P.outpatient;return`<div class="card ins-card"><div class="card-h"><span class="eyebrow">${t("ins_card_h")}</span><span class="ph">${t("ph_ins")}</span></div>
+  <h4 style="margin:0">${esc(S.ins.insurer||P.insurer)} · ${t("ins_plan_name")}</h4><p class="mq-meta" dir="ltr">${t("ins_policy_no")} ${esc(S.ins.policy)} · ${t("ins_member_id")} ${esc(S.ins.memberId)} · ${insDate(P.period.from)} – ${insDate(P.period.to)}</p>
+  <ul class="plain ins-rows"><li><b>${t("ins_inpatient")}</b><span>${t("ins_pct_designated",{pct:P.inpatient.pct})}</span></li><li><b>${t("ins_emergency")}</b><span>${t("ins_emerg_line",{h:P.emergency.notifyHours})}</span></li><li><b>${t("ins_outpatient")}</b><span>${t("ins_outp_line",{pct:o.consultCopay,lim:omr(o.sublimit)})}</span></li><li><b>${t("ins_pharmacy")}</b><span>${t("ins_copay",{pct:o.pharmacyCopay})}</span></li><li><b>${t("ins_limit")}</b><span>${omr(P.annualLimit)} · ${t("ins_left",{n:omr(P.annualLimit-P.annualUsed)})}</span></li><li><b>${t("ins_not_cov")}</b><span>${t("ins_not_cov_line")}</span></li></ul>
+  <p class="note">${t("ins_demo_note")}</p></div>`}
+/* ---- coverage check for a Sim outcome ---- */
+function insCoverage(level,complaint){const P=INS_PLAN,o=P.outpatient,x=String(complaint||"");const ex=INS_EXCL.find(([re])=>re.test(x));const left=P.annualLimit-P.annualUsed,oLeft=o.sublimit-o.used;
+  if(level>=4){return{status:"covered",setting:"ed",where:t("ins_where_ed"),cover:t("ins_cov_ed",{pct:P.emergency.pct}),pay:t("ins_pay_none"),est:`${omr(P.price.ed)}–${omr(P.price.edStay)}`,preauth:t("ins_preauth_emerg",{h:P.emergency.notifyHours}),left:omr(left),note:t("ins_note_ed",{pct:P.nonDesignated.pct})}}
+  if(ex){return{status:"excluded",setting:level===3?"sameday":"gp",where:t(level===3?"ins_where_sameday":"ins_where_gp"),cover:t("ins_cov_excl_"+ex[1]),pay:t("ins_pay_full",{n:omr(level===3?P.price.sameDay:P.price.gp)}),est:omr(level===3?P.price.sameDay:P.price.gp),preauth:t("ins_preauth_none"),left:omr(left),note:t("ins_note_excl")}}
+  if(level===3){const pay=P.price.sameDay*o.consultCopay/100;return{status:"partial",setting:"sameday",where:t("ins_where_sameday"),cover:t("ins_cov_outp",{pct:100-o.consultCopay}),pay:t("ins_pay_copay",{n:omr(pay),pct:o.consultCopay}),est:omr(P.price.sameDay),preauth:t("ins_preauth_imaging"),left:`${omr(oLeft)} ${t("ins_outp_short")}`,note:t("ins_note_card")}}
+  if(level===2){const pay=P.price.gp*o.consultCopay/100;return{status:"partial",setting:"gp",where:t("ins_where_gp"),cover:t("ins_cov_outp",{pct:100-o.consultCopay}),pay:t("ins_pay_copay_rx",{n:omr(pay),pct:o.consultCopay,rx:omr(P.price.pharmacy*o.pharmacyCopay/100)}),est:omr(P.price.gp),preauth:t("ins_preauth_none"),left:`${omr(oLeft)} ${t("ins_outp_short")}`,note:t("ins_note_card")}}
+  return{status:"self",setting:"self",where:t("ins_where_self"),cover:t("ins_cov_self",{pct:100-o.pharmacyCopay}),pay:t("ins_pay_otc"),est:omr(P.price.pharmacy),preauth:t("ins_preauth_none"),left:`${omr(oLeft)} ${t("ins_outp_short")}`,note:t("ins_note_self")}}
+const insPill=s=>`<span class="pill ${s==="covered"?"p-good":s==="partial"?"p-info":s==="excluded"?"p-bad":"p-mute"}">${t("ins_st_"+s)}</span>`;
+function insCovCard(c){return`<div class="card ins-card"><div class="card-h"><span class="eyebrow">${t("ins_check_h")}</span>${insPill(c.status)}</div>
+  <ul class="plain ins-rows"><li><b>${t("ins_r_where")}</b><span>${c.where}</span></li><li><b>${t("ins_r_cover")}</b><span>${c.cover}</span></li><li><b>${t("ins_r_pay")}</b><span>${c.pay} <small class="note">(${t("ins_r_est")} ${c.est})</small></span></li><li><b>${t("ins_r_preauth")}</b><span>${c.preauth}</span></li><li><b>${t("ins_r_left")}</b><span>${c.left}</span></li></ul>
+  <p class="note">${c.note}</p></div>`}
+function insAfterCare(m){if(!m||!m.result)return;const level=m.result.level||0,c=S.care[0];
+  if(!insOn()){if(!S.insAsked&&!(S.ins&&S.ins.none)&&level<4)S.insPending=()=>{bot(t("ins_offer_after"));replies([[t("ins_add_now"),()=>askInsurance(S.coreDone?coreReplies:null),{react:"benefits"}],[t("later"),insResume]])};return}
+  const cov=insCoverage(level,S.sim&&S.sim.complaint);if(c)c.cov=cov;S.lastCov={level,cov,date:now()};
+  bot(insCovCard(cov),{cls:"wide",delay:900});addUpdate(()=>`${t("ins_check_h")}: ${t("ins_st_"+cov.status)}`);renderHQ();
+  if(cov.status==="partial"||cov.status==="covered")S.insPending=()=>replies([[t("ins_ask_btn"),insAskStart],[t("ins_preauth_btn"),insPreauth,{react:"benefits"}],...(S.coreDone?[[t("hq_btn"),()=>{S.hqTab="insurance";setView("hq")},{silent:true}]]:[])])}
+/* back to whatever was on screen before Sim and the insurance aside */
+function insResume(){if(S.coreDone){coreReplies();return}const pr=S.simPrevKeep;S.simPrevKeep=null;if(pr&&pr.length){repEl.innerHTML="";pr.forEach(b=>repEl.appendChild(b));return}resumeFlow()}
+/* silent add (example member) */
+function insSetSilently(policy,insurer){S.ins={insurer:insurer||"Liva Insurance",policy,memberId:"M-"+policy.replace(/\D/g,"").slice(-6).padStart(6,"7"),plan:INS_PLAN,added:now(),preauths:[]};
+  setFact("ins",{fn:()=>`${S.ins.insurer} · ${t("ins_plan_name")} · ${S.ins.policy}`},"src_persona","cf_conf");addFile({id:"insurance",type:"ins",title:()=>t("file_ins"),body:insFileHTML,link:"insurance"})}
+/* ---- questions about the policy (Claude with the policy as context) ---- */
+function insContext(){const P=INS_PLAN,o=P.outpatient;return`Policy: ${S.ins.insurer||P.insurer}, ${P.product} (${P.plan} plan), policy ${S.ins.policy}, member ID ${S.ins.memberId}, period ${P.period.from} to ${P.period.to}, territory ${P.territory}.
+Annual limit ${P.annualLimit} OMR (used ${P.annualUsed}). Inpatient and day care: ${P.inpatient.pct}% at designated providers (Hospital Cost Band ${P.band}), semi-private room, direct billing with the membership card, pre-authorisation required; pre-hospitalisation 15 days and post-hospitalisation 30 days covered. Emergency: ${P.emergency.pct}% at any hospital, no pre-authorisation, insurer must be notified within ${P.emergency.notifyHours} hours. Non-designated providers: reimbursement at ${P.nonDesignated.pct}% of reasonable and customary charges, claim within 45 days, settled within 30 days.
+Outpatient benefit (opted): sub-limit ${o.sublimit} OMR a year (used ${o.used}); consultations ${o.consultCopay}% co-pay, prescribed medicines ${o.pharmacyCopay}% co-pay, diagnostics ${o.diagCopay}% co-pay, no deductible. Typical designated-provider prices: GP ${P.price.gp} OMR, specialist ${P.price.specialist}, same-day clinic ${P.price.sameDay}, emergency visit ${P.price.ed}-${P.price.edStay}, prescription ${P.price.pharmacy}, imaging ${P.price.imaging}, labs ${P.price.labs}.
+Not covered: dental, optical, maternity (not opted); pre-existing and chronic conditions and a list of planned surgeries (hernia, gallstones, joint replacement, tonsils, sinus, piles) in the first ${P.waitMonths} months; mental health including anxiety, insomnia and eating disorders; obesity programmes; routine check-ups, vaccinations, vitamins and supplements; alternative medicine; cosmetic treatment; hazardous sports; home visits and telephone consultations; hearing aids, CPAP, glasses and appliances; HIV; IVF; HRT; dialysis; treatment abroad unless emergency or pre-authorised.
+Pre-authorisation (Annexure I): ${P.preauthList.join("; ")}. Pre-authorisation is valid 14 days and does not guarantee payment. Free look 15 days, cancellation refund pro-rata up to 50%, 10% no-claim bonus on the annual limit per claim-free year (max 50%), cover ends at 65 or on leaving Oman. Helpline ${P.helpline}, ${P.email}.
+Note: the limits, co-pays and prices are a demo Table of Benefits; the rules come from the Liva Sahatuna policy booklet.`}
+function insAskStart(){bot(t("ins_ask_prompt"));run(()=>S.await="ins_q");replies([[t("ins_eg1"),()=>insAnswer(t("ins_eg1"))],[t("ins_eg2"),()=>insAnswer(t("ins_eg2"))],[t("ins_eg3"),()=>insAnswer(t("ins_eg3"))]])}
+function insAnswer(q){S.await=null;clearReplies();later(()=>new Promise(async res=>{const ty=add("typing",'<span class="dots"><i></i><i></i><i></i></span>');const ts=ty.querySelector(".ts");if(ts)ts.remove();
+    let txt=null;const s=sampleOff?null:await getSample();
+    if(s){try{const r=await s(`You are ELIA, Prime Health's AI health strategist, answering a member's question about their own health insurance policy. Answer in ${LANG_NAME[S.lang]}, in 2 to 5 short sentences or up to 4 bullets starting with "- ", plain language, amounts in OMR. Use only the policy below; if it doesn't settle the question, say so and point them to the insurer's helpline. Don't invent benefits. End with one practical next step when useful (membership card, pre-authorisation, designated provider, 48-hour notice).
+${insContext()}
+${S.lastCov?`Latest care check: Sim care level ${S.lastCov.level}/5, coverage ${S.lastCov.cov.status}.`:""}
+Question: """${q}"""`,{modelTier:"default"});txt=(r&&r.text||"").trim()||null}catch(e){}}
+    ty.remove();add("",txt?recMd(txt):`<p>${insFallback(q)}</p>`);res()}));
+  later(()=>{replies([[t("ins_ask_more"),insAskStart],[t("ins_preauth_btn"),insPreauth],[t("ins_done"),insResume]])})}
+/* no model: answer the common questions from the plan itself */
+function insFallback(q){const P=INS_PLAN,o=P.outpatient;if(/emergenc|urgenc|طوارئ/i.test(q))return t("ins_fb_emerg",{pct:P.emergency.pct,h:P.emergency.notifyHours});if(/co-?pay|copago|pay|cost|cuesta|أدفع|تكلفة/i.test(q))return t("ins_fb_copay",{c:o.consultCopay,r:o.pharmacyCopay,lim:omr(o.sublimit)});if(/dental|dent|optical|glasses|matern|أسنان|نظار/i.test(q))return t("ins_fb_notcov");if(/pre-?auth|authori|موافقة/i.test(q))return t("ins_fb_preauth");return t("ins_fb_default",{tel:P.helpline})}
+/* ---- actions ---- */
+function insPreauth(){if(!insOn())return;const ref="PA-"+String(Date.now()).slice(-6);const c=S.care[0];const what=c&&c.pathway?sl(c.pathway):t("ins_pa_generic");
+  S.ins.preauths.unshift({ref,date:now(),what,status:"pending"});addUpdate(()=>`${t("ins_pa_upd")} · ${ref}`);renderHQ();flashHQ();
+  bot(t("ins_pa_sent",{ref,what:esc(what)}));later(insResume)}
+function insRemove(){S.ins=null;S.lastCov=null;delete S.facts.ins;S.files=S.files.filter(f=>f.id!=="insurance");renderHQ()}
+/* ---- HQ ---- */
+function insFileHTML(){if(!insOn())return"";const P=INS_PLAN;return`<p style="margin:0"><b>${esc(S.ins.insurer||P.insurer)} · ${t("ins_plan_name")}</b><br><span dir="ltr">${t("ins_policy_no")} ${esc(S.ins.policy)} · ${t("ins_member_id")} ${esc(S.ins.memberId)}</span></p><ul class="plain"><li>${t("ins_inpatient")}: ${t("ins_pct_designated",{pct:P.inpatient.pct})}</li><li>${t("ins_outpatient")}: ${t("ins_outp_line",{pct:P.outpatient.consultCopay,lim:omr(P.outpatient.sublimit)})}</li><li>${t("ins_helpline")}: <span dir="ltr">${P.helpline}</span></li></ul>`}
+function insBar(used,total,label){const pct=Math.min(100,Math.round(used/total*100));return`<div><div class="mq-row"><b>${label}</b><span class="mq-pts">${omr(used)} / ${omr(total)}</span></div><div class="mq-bar"><i class="b-${pct<50?"good":pct<80?"improve":"attention"}" style="width:${Math.max(2,pct)}%"></i></div><span class="mq-meta">${t("ins_left",{n:omr(total-used)})}</span></div>`}
+function insPanel(){if(S.ins&&S.ins.none)return"";if(!insOn())return`<div class="panel"><h3>${t("hq_ins")}</h3><div class="note">${t("ins_empty_short")}</div><button class="linkbtn" data-ins="add" style="align-self:flex-start;padding:0">${t("ins_add_btn")} →</button></div>`;
+  const P=INS_PLAN,lc=S.lastCov;return`<div class="panel"><h3>${t("hq_ins")}</h3><div><b>${esc(S.ins.insurer||P.insurer)}</b> · ${t("ins_plan_name")}<br><small class="note" dir="ltr">${esc(S.ins.policy)}</small></div>${lc?`<div class="mq-row"><span class="note">${t("ins_last_check")}</span>${insPill(lc.cov.status)}</div>`:""}${insBar(P.annualUsed,P.annualLimit,t("ins_limit"))}<button class="linkbtn" data-goto="insurance" style="align-self:flex-start;padding:0">${t("hq_ins")} →</button></div>`}
+function hqInsurance(){let h=`<div><h2>${t("hq_ins")}</h2></div><p class="hq-sub">${t("ins_sub")}</p>`;
+  if(!insOn())return h+`<div class="panel"><h3>${t("ins_add_title")}</h3><p class="note" style="margin:0">${t("ins_add_body")}</p><button class="btn" data-ins="add" style="align-self:flex-start">${t("ins_add_btn")}</button></div>`;
+  const P=INS_PLAN,o=P.outpatient,lc=S.lastCov;const row=(k,v)=>`<li><b>${k}</b><span>${v}</span></li>`;
+  const yesno=b=>b?t("ins_yes_cov"):t("ins_not_opted");
+  return h+`<div class="grid2">
+  <div class="panel"><div class="card-h"><h3>${esc(S.ins.insurer||P.insurer)}</h3><span class="pill p-good">${t("ins_active")}</span></div>
+    <div><b>${t("ins_plan_name")}</b><br><small class="note" dir="ltr">${t("ins_policy_no")} ${esc(S.ins.policy)} · ${t("ins_member_id")} ${esc(S.ins.memberId)}</small><br><small class="note">${t("ins_period")}: ${insDate(P.period.from)} – ${insDate(P.period.to)} · ${t("ins_territory")}: ${P.territory}</small></div>
+    ${insBar(P.annualUsed,P.annualLimit,t("ins_limit"))}${o.opted?insBar(o.used,o.sublimit,t("ins_outp_limit")):""}
+    <div class="ins-actions"><button class="btn" data-ins="ask">${t("ins_ask_btn")}</button><button class="btn ghost" data-ins="preauth">${t("ins_preauth_btn")}</button><button class="btn ghost" data-tri>${t("tri_check")}</button></div>
+    <div class="note">${t("ins_helpline")}: <span dir="ltr">${P.helpline}</span> · <span dir="ltr">${P.email}</span></div></div>
+  <div class="panel"><h3>${t("ins_benefits_h")}</h3><ul class="plain ins-rows">
+    ${row(t("ins_inpatient"),t("ins_pct_designated",{pct:P.inpatient.pct})+" · "+t("ins_room_semi")+" · "+t("ins_preauth_req"))}
+    ${row(t("ins_daycare"),t("ins_pct_designated",{pct:P.daycare.pct})+" · "+t("ins_preauth_req"))}
+    ${row(t("ins_emergency"),t("ins_emerg_line",{h:P.emergency.notifyHours}))}
+    ${row(t("ins_outpatient"),t("ins_outp_line",{pct:o.consultCopay,lim:omr(o.sublimit)}))}
+    ${row(t("ins_pharmacy"),t("ins_copay",{pct:o.pharmacyCopay})+" · "+t("ins_rx_only"))}
+    ${row(t("ins_diag"),t("ins_copay",{pct:o.diagCopay}))}
+    ${row(t("ins_nondesig"),t("ins_nondesig_line",{pct:P.nonDesignated.pct}))}
+    ${row(t("ins_prepost"),t("ins_prepost_line"))}
+    ${row(t("ins_dental"),yesno(P.dental))}${row(t("ins_optical"),yesno(P.optical))}${row(t("ins_maternity"),yesno(P.maternity))}
+    ${row(t("ins_preexist"),t("ins_preexist_line",{m:P.waitMonths}))}</ul>
+    <p class="note" style="margin:0">${t("ins_demo_note")}</p></div>
+  ${lc?`<div class="panel"><div class="card-h"><h3>${t("ins_last_check")}</h3>${insPill(lc.cov.status)}</div><div class="note">${fmtDate(lc.date)} ${fmtTime(lc.date)} · ${SU("careLevel")} ${lc.level}/5</div><ul class="plain ins-rows">${row(t("ins_r_where"),lc.cov.where)}${row(t("ins_r_cover"),lc.cov.cover)}${row(t("ins_r_pay"),lc.cov.pay)}${row(t("ins_r_preauth"),lc.cov.preauth)}</ul></div>`:""}
+  ${S.ins.preauths.length?`<div class="panel"><h3>${t("ins_pa_h")}</h3>${S.ins.preauths.map(p=>`<div class="mq-row"><span><b dir="ltr">${p.ref}</b><br><small class="note">${esc(p.what)} · ${fmtDate(p.date)}</small></span><span class="pill p-warn">${t("ins_pa_pending")}</span></div>`).join("")}<p class="note" style="margin:0">${t("ins_pa_note")}</p></div>`:""}
+  <div class="panel"><h3>${t("ins_preauth_h")}</h3><ul class="plain" style="font-size:13.5px">${P.preauthList.map(x=>`<li>${esc(x)}</li>`).join("")}</ul><p class="note" style="margin:0">${t("ins_preauth_note")}</p></div>
+  <div class="panel"><h3>${t("ins_excl_h")}</h3><ul class="plain" style="font-size:13.5px">${P.exclusions.map(x=>`<li>${esc(x)}</li>`).join("")}</ul><button class="linkbtn" data-ins="remove" style="align-self:flex-start;padding:0">${t("ins_remove")}</button></div>
+  </div>`}
+document.addEventListener("click",e=>{const g=e.target.closest&&e.target.closest("[data-ins]");if(!g)return;const a=g.dataset.ins;
+  if(a==="add"){setView("chat");askInsurance(S.coreDone?coreReplies:null);return}
+  if(a==="ask"){setView("chat");insAskStart();return}
+  if(a==="preauth"){setView("chat");insPreauth();return}
+  if(a==="remove"){insRemove();return}});
+Object.assign(L.en,{hq_ins:"My Insurance",file_ins:"Insurance policy",ph_ins:"Liva Sahatuna · demo Table of Benefits",ins_plan_name:"Sahatuna Individual Medical · Silver",
+ ins_q:"One more thing that saves surprises later: do you have health insurance? If you share your insurer and policy number, I can tell you what's covered before any visit, and what you'd pay.",
+ ins_yes:"Yes, add my policy",ins_no:"No insurance",ins_insurer_q:"Who is your insurer?",ins_liva:"Liva Insurance",ins_other:"Another insurer",ins_type_insurer:"Type the insurer's name.",
+ ins_policy_q:"Got it, {ins}. What's your policy number? It's on your membership card.",ins_policy_bad:"That doesn't look like a policy number. It usually has letters and digits, for example LIV-SAH-2026-048213.",
+ ins_no_ok:"No problem. If that changes, tell me and I'll add it.",ins_later_ok:"Sure, we can add it anytime from ELIA HQ.",
+ ins_found:"Found it: your {plan} plan is active. Here's the short version.",ins_how:"Whenever Sim checks a symptom, I'll show whether the visit is covered and what you'd pay. Ask me anything about the policy, anytime.",
+ ins_card_h:"Your cover",ins_policy_no:"Policy",ins_member_id:"Member ID",ins_inpatient:"Hospital stays",ins_daycare:"Day care",ins_emergency:"Emergency",ins_outpatient:"Clinic visits",ins_pharmacy:"Prescriptions",ins_diag:"Tests and imaging",ins_limit:"Annual limit",ins_outp_limit:"Outpatient sub-limit",ins_not_cov:"Not covered",ins_nondesig:"Outside the network",ins_prepost:"Around a hospital stay",ins_dental:"Dental",ins_optical:"Optical",ins_maternity:"Maternity",ins_preexist:"Pre-existing conditions",
+ ins_pct_designated:"{pct}% at designated providers, direct billing",ins_emerg_line:"100% at any hospital, no pre-authorisation; notify Liva within {h} hours",ins_outp_line:"{pct}% co-pay at designated clinics, up to {lim} a year",ins_copay:"{pct}% co-pay",ins_left:"{n} left",ins_not_cov_line:"Dental, optical, maternity; pre-existing conditions in year 1; mental health; routine check-ups",ins_room_semi:"semi-private room",ins_preauth_req:"pre-authorisation required",ins_rx_only:"prescribed medicines only",ins_nondesig_line:"Reimbursed at {pct}% of reasonable and customary charges, claim within 45 days",ins_prepost_line:"15 days before and 30 days after, same condition",ins_preexist_line:"Excluded for the first {m} months, and listed planned surgeries",ins_yes_cov:"Covered",ins_not_opted:"Not included in this plan",
+ ins_demo_note:"Rules from the Liva Sahatuna policy booklet. Limits, co-pays and prices are a demo Table of Benefits, not your real schedule.",
+ ins_check_h:"Insurance check for this visit",ins_st_covered:"Covered",ins_st_partial:"Covered with co-pay",ins_st_excluded:"May not be covered",ins_st_self:"Self-care",
+ ins_r_where:"Where to go",ins_r_cover:"What's covered",ins_r_pay:"What you pay",ins_r_est:"typical cost",ins_r_preauth:"Pre-authorisation",ins_r_left:"Remaining",ins_outp_short:"of your outpatient limit",
+ ins_where_ed:"Nearest emergency department, any hospital",ins_where_sameday:"A designated clinic or polyclinic today, with your membership card",ins_where_gp:"A designated GP or polyclinic, with your membership card",ins_where_self:"Home care; a designated pharmacy if you need a prescription",
+ ins_cov_ed:"Emergency care {pct}%, including tests and any admission",ins_cov_outp:"Consultation, prescribed medicines and tests at {pct}%",ins_cov_self:"Prescribed medicines at {pct}% if a doctor prescribes them; over-the-counter items are not covered",
+ ins_cov_excl_mental:"This plan excludes mental-health, anxiety and insomnia treatment (general exclusion 15)",ins_cov_excl_dental:"Dental is not included in this plan",ins_cov_excl_optical:"Optical is not included in this plan",ins_cov_excl_maternity:"Maternity is not included in this plan",ins_cov_excl_cosmetic:"Cosmetic treatment is excluded",ins_cov_excl_hazard:"Injuries from hazardous sports are excluded",
+ ins_pay_none:"Nothing at the hospital; Liva bills directly",ins_pay_copay:"About {n} ({pct}% co-pay on the consultation), plus {pct}% of any tests",ins_pay_copay_rx:"About {n} ({pct}% co-pay), plus about {rx} on a typical prescription",ins_pay_full:"The full cost, about {n}, unless the doctor finds a covered cause",ins_pay_otc:"Over-the-counter items in full; prescriptions with a 20% co-pay",
+ ins_preauth_none:"Not needed",ins_preauth_imaging:"Not for the visit; needed for MRI, CT and similar imaging",ins_preauth_emerg:"Not needed; someone must notify Liva within {h} hours of admission",
+ ins_note_ed:"If you go to a non-designated hospital, emergency care is still covered; non-emergency follow-up there is reimbursed at {pct}%.",ins_note_card:"Show your Liva membership card at reception for direct billing. Pre-existing or chronic conditions in the first policy year are not covered.",ins_note_self:"Vitamins, supplements and routine check-ups are excluded. If symptoms persist, a GP visit is covered with the usual co-pay.",ins_note_excl:"Worth a GP visit anyway: the first visit to find the cause is covered with the usual co-pay, and the doctor can advise on next steps.",
+ ins_offer_after:"If you have health insurance, I can check what a visit like this would cost you. Want to add your policy?",ins_add_now:"Add my policy",
+ ins_ask_btn:"Ask about my cover",ins_preauth_btn:"Request pre-authorisation",ins_ask_more:"Another question",ins_ask_prompt:"What would you like to know about your policy?",ins_eg1:"Is an MRI covered?",ins_eg2:"What do I pay at the pharmacy?",ins_eg3:"Can I use a hospital outside the network?",
+ ins_fb_emerg:"Emergencies are covered at {pct}% at any hospital, with no pre-authorisation. Someone needs to notify Liva within {h} hours of admission.",ins_fb_copay:"At designated clinics you pay a {c}% co-pay on consultations and {r}% on prescribed medicines, within your {lim} outpatient limit. Show your membership card for direct billing.",ins_fb_notcov:"Dental, optical and maternity aren't included in this plan. They're optional benefits you could add at renewal.",ins_fb_preauth:"Pre-authorisation is needed for admissions, day care, surgery, advanced imaging like MRI and CT, endoscopy, cardiac tests and physiotherapy. It's valid for 14 days. Emergencies don't need it.",ins_fb_default:"I can't look that up in this version. The policy helpline is {tel}, and your membership card has the claims number.",
+ ins_pa_sent:"Pre-authorisation request {ref} sent to Liva for: {what}. They usually answer within one working day; approvals are valid for 14 days. I'll keep it in ELIA HQ.",ins_pa_generic:"the care Sim recommended",ins_pa_upd:"Pre-authorisation requested",ins_pa_h:"Pre-authorisation requests",ins_pa_pending:"Pending",ins_pa_note:"Simulated for the demo. Approval does not guarantee payment; the claim is still reviewed against the policy.",
+ ins_added_upd:"Insurance policy added",ins_none:"No health insurance",f_ins:"Health insurance",
+ ins_sub:"Your policy, what it covers, and what a visit would cost you.",ins_empty_short:"No policy added yet.",ins_add_btn:"Add my policy",ins_add_title:"Add your health insurance",ins_add_body:"Share your insurer and policy number in the chat and ELIA will show coverage and co-pays whenever Sim recommends care.",ins_active:"Active",ins_period:"Period",ins_territory:"Territory",ins_helpline:"Liva helpline",ins_benefits_h:"Table of benefits",ins_last_check:"Latest coverage check",ins_preauth_h:"Needs pre-authorisation",ins_preauth_note:"Valid 14 days from issue. Emergencies are exempt but must be notified within 48 hours.",ins_excl_h:"Main exclusions",ins_remove:"Remove this policy",ins_done:"That's all, thanks"});
+Object.assign(L.es,{hq_ins:"Mi seguro",file_ins:"Póliza de seguro",ph_ins:"Liva Sahatuna · tabla de beneficios de demo",ins_plan_name:"Sahatuna Individual Medical · Silver",
+ ins_q:"Una cosa más que evita sorpresas: ¿tienes seguro médico? Si me das tu aseguradora y número de póliza, te diré qué está cubierto antes de cualquier visita y cuánto pagarías.",
+ ins_yes:"Sí, agregar mi póliza",ins_no:"No tengo seguro",ins_insurer_q:"¿Cuál es tu aseguradora?",ins_liva:"Liva Insurance",ins_other:"Otra aseguradora",ins_type_insurer:"Escribe el nombre de la aseguradora.",
+ ins_policy_q:"Perfecto, {ins}. ¿Cuál es tu número de póliza? Está en tu tarjeta de miembro.",ins_policy_bad:"Eso no parece un número de póliza. Suele tener letras y dígitos, por ejemplo LIV-SAH-2026-048213.",
+ ins_no_ok:"Sin problema. Si cambia, dímelo y lo agrego.",ins_later_ok:"Claro, podemos agregarlo cuando quieras desde ELIA HQ.",
+ ins_found:"Encontrado: tu plan {plan} está activo. Esta es la versión corta.",ins_how:"Cada vez que Sim revise un síntoma, te mostraré si la visita está cubierta y cuánto pagarías. Pregúntame lo que quieras sobre la póliza.",
+ ins_card_h:"Tu cobertura",ins_policy_no:"Póliza",ins_member_id:"ID de miembro",ins_inpatient:"Hospitalización",ins_daycare:"Cirugía ambulatoria",ins_emergency:"Emergencias",ins_outpatient:"Consultas",ins_pharmacy:"Recetas",ins_diag:"Pruebas e imágenes",ins_limit:"Límite anual",ins_outp_limit:"Sublímite ambulatorio",ins_not_cov:"No cubierto",ins_nondesig:"Fuera de la red",ins_prepost:"Antes y después de hospitalizar",ins_dental:"Dental",ins_optical:"Óptica",ins_maternity:"Maternidad",ins_preexist:"Condiciones preexistentes",
+ ins_pct_designated:"{pct}% en proveedores designados, facturación directa",ins_emerg_line:"100% en cualquier hospital, sin preautorización; avisar a Liva en {h} horas",ins_outp_line:"{pct}% de copago en clínicas designadas, hasta {lim} al año",ins_copay:"{pct}% de copago",ins_left:"quedan {n}",ins_not_cov_line:"Dental, óptica, maternidad; preexistentes en el año 1; salud mental; chequeos de rutina",ins_room_semi:"habitación semiprivada",ins_preauth_req:"requiere preautorización",ins_rx_only:"solo medicamentos recetados",ins_nondesig_line:"Reembolso del {pct}% de los cargos razonables y habituales, reclamo en 45 días",ins_prepost_line:"15 días antes y 30 después, misma condición",ins_preexist_line:"Excluidas los primeros {m} meses, y cirugías programadas listadas",ins_yes_cov:"Cubierto",ins_not_opted:"No incluido en este plan",
+ ins_demo_note:"Reglas del folleto de la póliza Liva Sahatuna. Límites, copagos y precios son una tabla de beneficios de demo, no tu esquema real.",
+ ins_check_h:"Revisión del seguro para esta visita",ins_st_covered:"Cubierto",ins_st_partial:"Cubierto con copago",ins_st_excluded:"Quizá no cubierto",ins_st_self:"Autocuidado",
+ ins_r_where:"A dónde ir",ins_r_cover:"Qué cubre",ins_r_pay:"Qué pagas",ins_r_est:"costo típico",ins_r_preauth:"Preautorización",ins_r_left:"Restante",ins_outp_short:"de tu límite ambulatorio",
+ ins_where_ed:"Urgencias más cercanas, cualquier hospital",ins_where_sameday:"Una clínica o policlínica designada hoy, con tu tarjeta de miembro",ins_where_gp:"Un médico general o policlínica designada, con tu tarjeta de miembro",ins_where_self:"Cuidado en casa; una farmacia designada si necesitas receta",
+ ins_cov_ed:"Atención de emergencia al {pct}%, incluidas pruebas y cualquier ingreso",ins_cov_outp:"Consulta, medicamentos recetados y pruebas al {pct}%",ins_cov_self:"Medicamentos recetados al {pct}% si un médico los receta; los de venta libre no están cubiertos",
+ ins_cov_excl_mental:"Este plan excluye salud mental, ansiedad e insomnio (exclusión general 15)",ins_cov_excl_dental:"Dental no está incluido en este plan",ins_cov_excl_optical:"Óptica no está incluida en este plan",ins_cov_excl_maternity:"Maternidad no está incluida en este plan",ins_cov_excl_cosmetic:"Los tratamientos estéticos están excluidos",ins_cov_excl_hazard:"Lesiones por deportes de riesgo están excluidas",
+ ins_pay_none:"Nada en el hospital; Liva factura directamente",ins_pay_copay:"Unos {n} ({pct}% de copago en la consulta), más {pct}% de las pruebas",ins_pay_copay_rx:"Unos {n} ({pct}% de copago), más unos {rx} en una receta típica",ins_pay_full:"El costo completo, unos {n}, salvo que el médico encuentre una causa cubierta",ins_pay_otc:"Venta libre al 100%; recetas con 20% de copago",
+ ins_preauth_none:"No se necesita",ins_preauth_imaging:"No para la visita; sí para resonancia, tomografía e imágenes similares",ins_preauth_emerg:"No se necesita; alguien debe avisar a Liva en {h} horas desde el ingreso",
+ ins_note_ed:"Si vas a un hospital no designado, la emergencia sigue cubierta; el seguimiento no urgente allí se reembolsa al {pct}%.",ins_note_card:"Muestra tu tarjeta Liva en recepción para facturación directa. Las condiciones preexistentes o crónicas no están cubiertas el primer año.",ins_note_self:"Vitaminas, suplementos y chequeos de rutina están excluidos. Si persisten los síntomas, la visita al médico está cubierta con el copago habitual.",ins_note_excl:"Vale la pena ir al médico igual: la primera visita para encontrar la causa está cubierta con el copago habitual.",
+ ins_offer_after:"Si tienes seguro médico, puedo revisar cuánto te costaría una visita así. ¿Agregamos tu póliza?",ins_add_now:"Agregar mi póliza",
+ ins_ask_btn:"Preguntar sobre mi cobertura",ins_preauth_btn:"Pedir preautorización",ins_ask_more:"Otra pregunta",ins_ask_prompt:"¿Qué quieres saber sobre tu póliza?",ins_eg1:"¿Está cubierta una resonancia?",ins_eg2:"¿Qué pago en la farmacia?",ins_eg3:"¿Puedo usar un hospital fuera de la red?",
+ ins_fb_emerg:"Las emergencias están cubiertas al {pct}% en cualquier hospital, sin preautorización. Alguien debe avisar a Liva en {h} horas desde el ingreso.",ins_fb_copay:"En clínicas designadas pagas {c}% de copago en consultas y {r}% en medicamentos recetados, dentro de tu límite ambulatorio de {lim}. Muestra tu tarjeta para facturación directa.",ins_fb_notcov:"Dental, óptica y maternidad no están incluidas en este plan. Son beneficios opcionales que podrías agregar al renovar.",ins_fb_preauth:"Se necesita preautorización para ingresos, cirugía ambulatoria, imágenes avanzadas como resonancia y tomografía, endoscopia, pruebas cardíacas y fisioterapia. Vale 14 días. Las emergencias no la necesitan.",ins_fb_default:"No puedo consultarlo en esta versión. La línea de la póliza es {tel}, y tu tarjeta tiene el número de reclamos.",
+ ins_pa_sent:"Solicitud de preautorización {ref} enviada a Liva para: {what}. Suelen responder en un día hábil; las aprobaciones valen 14 días. La guardo en ELIA HQ.",ins_pa_generic:"la atención que recomendó Sim",ins_pa_upd:"Preautorización solicitada",ins_pa_h:"Solicitudes de preautorización",ins_pa_pending:"Pendiente",ins_pa_note:"Simulado para la demo. La aprobación no garantiza el pago; el reclamo se revisa según la póliza.",
+ ins_added_upd:"Póliza de seguro agregada",ins_none:"Sin seguro médico",f_ins:"Seguro médico",
+ ins_sub:"Tu póliza, qué cubre y cuánto te costaría una visita.",ins_empty_short:"Aún no hay póliza.",ins_add_btn:"Agregar mi póliza",ins_add_title:"Agrega tu seguro médico",ins_add_body:"Comparte tu aseguradora y número de póliza en el chat y ELIA mostrará cobertura y copagos cada vez que Sim recomiende atención.",ins_active:"Activa",ins_period:"Periodo",ins_territory:"Territorio",ins_helpline:"Línea Liva",ins_benefits_h:"Tabla de beneficios",ins_last_check:"Última revisión de cobertura",ins_preauth_h:"Requiere preautorización",ins_preauth_note:"Vale 14 días desde la emisión. Las emergencias están exentas pero deben notificarse en 48 horas.",ins_excl_h:"Exclusiones principales",ins_remove:"Quitar esta póliza",ins_done:"Eso es todo, gracias"});
+Object.assign(L.ar,{hq_ins:"تأميني",file_ins:"وثيقة التأمين",ph_ins:"ليفا صحتنا · جدول منافع تجريبي",ins_plan_name:"صحتنا للتأمين الطبي الفردي · فضي",
+ ins_q:"أمر أخير يجنّبك المفاجآت: هل لديك تأمين صحي؟ إذا شاركتني شركة التأمين ورقم الوثيقة فسأخبرك بما هو مغطى قبل أي زيارة وكم ستدفع.",
+ ins_yes:"نعم، أضف وثيقتي",ins_no:"ليس لدي تأمين",ins_insurer_q:"من شركة التأمين؟",ins_liva:"ليفا للتأمين",ins_other:"شركة أخرى",ins_type_insurer:"اكتب اسم شركة التأمين.",
+ ins_policy_q:"تمام، {ins}. ما رقم وثيقتك؟ تجده على بطاقة العضوية.",ins_policy_bad:"لا يبدو هذا رقم وثيقة. عادةً يحوي حروفًا وأرقامًا، مثل LIV-SAH-2026-048213.",
+ ins_no_ok:"لا مشكلة. إذا تغيّر ذلك فأخبرني وسأضيفه.",ins_later_ok:"بالتأكيد، يمكننا إضافته في أي وقت من ELIA HQ.",
+ ins_found:"وجدتها: خطتك {plan} سارية. إليك الملخص.",ins_how:"كلما فحص سيم عرضًا، سأريك ما إذا كانت الزيارة مغطاة وكم ستدفع. اسألني أي شيء عن الوثيقة في أي وقت.",
+ ins_card_h:"تغطيتك",ins_policy_no:"الوثيقة",ins_member_id:"رقم العضو",ins_inpatient:"الإقامة في المستشفى",ins_daycare:"الرعاية النهارية",ins_emergency:"الطوارئ",ins_outpatient:"زيارات العيادة",ins_pharmacy:"الوصفات",ins_diag:"الفحوص والأشعة",ins_limit:"الحد السنوي",ins_outp_limit:"الحد الفرعي للعيادات",ins_not_cov:"غير مغطى",ins_nondesig:"خارج الشبكة",ins_prepost:"قبل الإقامة وبعدها",ins_dental:"الأسنان",ins_optical:"البصريات",ins_maternity:"الأمومة",ins_preexist:"الحالات السابقة",
+ ins_pct_designated:"{pct}% لدى مقدمي الخدمة المعتمدين، فوترة مباشرة",ins_emerg_line:"100% في أي مستشفى دون موافقة مسبقة؛ يُبلَّغ ليفا خلال {h} ساعة",ins_outp_line:"{pct}% مساهمة في العيادات المعتمدة، حتى {lim} سنويًا",ins_copay:"{pct}% مساهمة",ins_left:"المتبقي {n}",ins_not_cov_line:"الأسنان والبصريات والأمومة؛ الحالات السابقة في السنة الأولى؛ الصحة النفسية؛ الفحوص الدورية",ins_room_semi:"غرفة شبه خاصة",ins_preauth_req:"تتطلب موافقة مسبقة",ins_rx_only:"الأدوية الموصوفة فقط",ins_nondesig_line:"تعويض بنسبة {pct}% من الرسوم المعقولة والمعتادة، المطالبة خلال 45 يومًا",ins_prepost_line:"15 يومًا قبل و30 يومًا بعد، لنفس الحالة",ins_preexist_line:"مستثناة خلال أول {m} شهرًا، مع الجراحات المخططة المدرجة",ins_yes_cov:"مغطى",ins_not_opted:"غير مشمول في هذه الخطة",
+ ins_demo_note:"القواعد من كتيب وثيقة ليفا صحتنا. الحدود والمساهمات والأسعار جدول منافع تجريبي وليست جدولك الفعلي.",
+ ins_check_h:"فحص التأمين لهذه الزيارة",ins_st_covered:"مغطى",ins_st_partial:"مغطى مع مساهمة",ins_st_excluded:"قد لا يكون مغطى",ins_st_self:"رعاية ذاتية",
+ ins_r_where:"إلى أين تذهب",ins_r_cover:"ما المغطى",ins_r_pay:"ما تدفعه",ins_r_est:"التكلفة المعتادة",ins_r_preauth:"الموافقة المسبقة",ins_r_left:"المتبقي",ins_outp_short:"من حد العيادات",
+ ins_where_ed:"أقرب قسم طوارئ، أي مستشفى",ins_where_sameday:"عيادة أو مجمع طبي معتمد اليوم، مع بطاقة العضوية",ins_where_gp:"طبيب عام أو مجمع طبي معتمد، مع بطاقة العضوية",ins_where_self:"رعاية منزلية؛ صيدلية معتمدة إن احتجت وصفة",
+ ins_cov_ed:"رعاية الطوارئ بنسبة {pct}%، بما فيها الفحوص وأي دخول للمستشفى",ins_cov_outp:"الاستشارة والأدوية الموصوفة والفحوص بنسبة {pct}%",ins_cov_self:"الأدوية الموصوفة بنسبة {pct}% إذا وصفها طبيب؛ الأدوية دون وصفة غير مغطاة",
+ ins_cov_excl_mental:"تستثني هذه الخطة علاج الصحة النفسية والقلق والأرق (الاستثناء العام 15)",ins_cov_excl_dental:"الأسنان غير مشمولة في هذه الخطة",ins_cov_excl_optical:"البصريات غير مشمولة في هذه الخطة",ins_cov_excl_maternity:"الأمومة غير مشمولة في هذه الخطة",ins_cov_excl_cosmetic:"العلاجات التجميلية مستثناة",ins_cov_excl_hazard:"إصابات الرياضات الخطرة مستثناة",
+ ins_pay_none:"لا شيء في المستشفى؛ ليفا تدفع مباشرة",ins_pay_copay:"نحو {n} ({pct}% مساهمة في الاستشارة)، زائد {pct}% من أي فحوص",ins_pay_copay_rx:"نحو {n} ({pct}% مساهمة)، زائد نحو {rx} لوصفة معتادة",ins_pay_full:"التكلفة كاملة، نحو {n}، ما لم يجد الطبيب سببًا مغطى",ins_pay_otc:"الأدوية دون وصفة بالكامل؛ الوصفات بمساهمة 20%",
+ ins_preauth_none:"غير مطلوبة",ins_preauth_imaging:"ليست للزيارة؛ مطلوبة للرنين والأشعة المقطعية وما شابه",ins_preauth_emerg:"غير مطلوبة؛ يجب إبلاغ ليفا خلال {h} ساعة من الدخول",
+ ins_note_ed:"إذا ذهبت إلى مستشفى غير معتمد تبقى الطوارئ مغطاة؛ أما المتابعة غير الطارئة هناك فتُعوَّض بنسبة {pct}%.",ins_note_card:"أبرز بطاقة ليفا في الاستقبال للفوترة المباشرة. الحالات السابقة أو المزمنة غير مغطاة في السنة الأولى.",ins_note_self:"الفيتامينات والمكملات والفحوص الدورية مستثناة. إذا استمرت الأعراض فزيارة الطبيب مغطاة بالمساهمة المعتادة.",ins_note_excl:"تستحق زيارة الطبيب على أي حال: الزيارة الأولى لمعرفة السبب مغطاة بالمساهمة المعتادة.",
+ ins_offer_after:"إذا كان لديك تأمين صحي فيمكنني حساب كم ستكلفك زيارة كهذه. هل نضيف وثيقتك؟",ins_add_now:"أضف وثيقتي",
+ ins_ask_btn:"اسأل عن تغطيتي",ins_preauth_btn:"طلب موافقة مسبقة",ins_ask_more:"سؤال آخر",ins_ask_prompt:"ماذا تريد أن تعرف عن وثيقتك؟",ins_eg1:"هل الرنين المغناطيسي مغطى؟",ins_eg2:"كم أدفع في الصيدلية؟",ins_eg3:"هل يمكنني استخدام مستشفى خارج الشبكة؟",
+ ins_fb_emerg:"الطوارئ مغطاة بنسبة {pct}% في أي مستشفى دون موافقة مسبقة. يجب إبلاغ ليفا خلال {h} ساعة من الدخول.",ins_fb_copay:"في العيادات المعتمدة تدفع {c}% مساهمة في الاستشارات و{r}% في الأدوية الموصوفة، ضمن حد العيادات {lim}. أبرز بطاقتك للفوترة المباشرة.",ins_fb_notcov:"الأسنان والبصريات والأمومة غير مشمولة في هذه الخطة. وهي منافع اختيارية يمكن إضافتها عند التجديد.",ins_fb_preauth:"الموافقة المسبقة مطلوبة للدخول والرعاية النهارية والجراحة والأشعة المتقدمة كالرنين والمقطعية والمناظير وفحوص القلب والعلاج الطبيعي. صالحة 14 يومًا. الطوارئ لا تحتاجها.",ins_fb_default:"لا أستطيع البحث عن ذلك في هذه النسخة. خط الوثيقة {tel}، وبطاقتك تحمل رقم المطالبات.",
+ ins_pa_sent:"أُرسل طلب الموافقة المسبقة {ref} إلى ليفا بشأن: {what}. يردّون عادةً خلال يوم عمل؛ الموافقات صالحة 14 يومًا. سأحفظه في ELIA HQ.",ins_pa_generic:"الرعاية التي أوصى بها سيم",ins_pa_upd:"طُلبت موافقة مسبقة",ins_pa_h:"طلبات الموافقة المسبقة",ins_pa_pending:"قيد الانتظار",ins_pa_note:"محاكاة للعرض. الموافقة لا تضمن الدفع؛ تُراجع المطالبة وفق الوثيقة.",
+ ins_added_upd:"أُضيفت وثيقة التأمين",ins_none:"لا يوجد تأمين صحي",f_ins:"التأمين الصحي",
+ ins_sub:"وثيقتك وما تغطيه وكم ستكلفك الزيارة.",ins_empty_short:"لم تُضف وثيقة بعد.",ins_add_btn:"أضف وثيقتي",ins_add_title:"أضف تأمينك الصحي",ins_add_body:"شارك شركة التأمين ورقم الوثيقة في الدردشة وستعرض ELIA التغطية والمساهمات كلما أوصى سيم برعاية.",ins_active:"سارية",ins_period:"الفترة",ins_territory:"النطاق الجغرافي",ins_helpline:"خط ليفا",ins_benefits_h:"جدول المنافع",ins_last_check:"آخر فحص للتغطية",ins_preauth_h:"يتطلب موافقة مسبقة",ins_preauth_note:"صالحة 14 يومًا من الإصدار. الطوارئ معفاة لكن يجب الإبلاغ خلال 48 ساعة.",ins_excl_h:"أهم الاستثناءات",ins_remove:"إزالة هذه الوثيقة",ins_done:"هذا كل شيء، شكرًا"});
+
 /* ============ Sleep pillar ============ */
 /* ============ Sleep pillar (Sleep Streamlined v4) ============
    Rapid onboarding: Q1 Restoration always; Q2 regularity, Q3 hours and Q4 efficiency only when a wearable has no sleep data;
@@ -3390,7 +3580,7 @@ function setReplies(list){repEl.innerHTML="";S.curReplies=list;S.curQ=typeof cur
 function clearReplies(){repEl.innerHTML=""}
 /* After anything off-script (a question, a language switch, an unclear reply, a voice note with no words),
    bring the member back to the open question: ask it again if it was typed, and restore its buttons. */
-const REASK={age:"ask_age",hw:"ask_hw",meal:"ask_meal",allergy:"ask_allergy",ing:"ask_ing",sl_q1:"sl_q1",sl_q2:"sl_q2",sl_q3:"sl_q3",sl_q4:"sl_q4",sl_wake:"sl_ask_wake"};
+const REASK={age:"ask_age",hw:"ask_hw",meal:"ask_meal",allergy:"ask_allergy",ing:"ask_ing",sl_q1:"sl_q1",sl_q2:"sl_q2",sl_q3:"sl_q3",sl_q4:"sl_q4",sl_wake:"sl_ask_wake",ins_insurer:"ins_insurer_q",ins_q:"ins_ask_prompt"};
 function restorePrompt(){later(()=>{if(!repEl.children.length&&S.curReplies)setReplies(S.curReplies)})}
 function reprompt(){if(S.coreDone&&!S.await){coreReplies();return}const ask={age:askAge,hw:askHW,meal:askMeal,ing:askIng}[S.await];if(ask){clearReplies();S.curReplies=null;ask();return}const k=REASK[S.await];if(k)bot(t(k));restorePrompt()}
 function run(fn){later(()=>{fn()})}
@@ -3671,8 +3861,8 @@ $("#btnVoice").onclick=()=>{voice()};
    3. A question that isn't an answer: health → answered from the member's data, otherwise with Claude, then back to the open question;
       anything else → a reminder of what ELIA is for, then back to the open question. */
 const Q_RE=/[?؟]|^\s*(?:what|what's|whats|when|which|who|how|why|where|is|are|can|could|should|would|do|does|did|will|tell me|explain|qu[eé]|cu[aá]l(?:es)?|cu[aá]ndo|qui[eé]n|c[oó]mo|por qu[eé]|d[oó]nde|puedo|debo|es|son|hay|ما|ماذا|متى|من|كيف|لماذا|أين|هل)\b/i;
-const HEALTH_RE=/\b(?:health|diet|food|eat(?:ing|s)?\b|meals?\b|calori|protein|carbs?\b|sugar|fats?\b|fiber|fibre|vitamin|supplement|water|hydrat|sleep|tired|energy|stress|anxi|mood|exercis|workout|walk|steps|weight|bmi\b|blood|pressure|heart|cholesterol|glucose|diabet|a1c|medic|doctor|pain|symptom|fasting|score|prime)|salud|comida|dieta|dormir|sueño|ejercicio|peso|presi[oó]n|az[uú]car|estr[eé]s|صحة|طعام|غذاء|نوم|رياضة|وزن|ضغط|سكر|توتر/i;
-const AWAIT_DESC={name:"their first name",age:"their age in years",hw:"their height and weight",meal:"what they ate at their last meal",allergy:"any food allergies (or none)",ing:"what food they have at home",sl_q1:"a 0 to 10 rating of how restored they feel on waking",sl_q2:"a 0 to 10 rating of how regular their sleep times are",sl_q3:"their usual hours of sleep per night",sl_q4:"a 0 to 10 rating of how easily they fall and stay asleep",sl_wake:"the wake-up time they choose"};
+const HEALTH_RE=/\b(?:health|insur|diet|food|eat(?:ing|s)?\b|meals?\b|calori|protein|carbs?\b|sugar|fats?\b|fiber|fibre|vitamin|supplement|water|hydrat|sleep|tired|energy|stress|anxi|mood|exercis|workout|walk|steps|weight|bmi\b|blood|pressure|heart|cholesterol|glucose|diabet|a1c|medic|doctor|pain|symptom|fasting|score|prime)|salud|comida|dieta|dormir|sueño|ejercicio|peso|presi[oó]n|az[uú]car|estr[eé]s|صحة|طعام|غذاء|نوم|رياضة|وزن|ضغط|سكر|توتر/i;
+const AWAIT_DESC={name:"their first name",age:"their age in years",hw:"their height and weight",meal:"what they ate at their last meal",allergy:"any food allergies (or none)",ing:"what food they have at home",sl_q1:"a 0 to 10 rating of how restored they feel on waking",sl_q2:"a 0 to 10 rating of how regular their sleep times are",sl_q3:"their usual hours of sleep per night",sl_q4:"a 0 to 10 rating of how easily they fall and stay asleep",sl_wake:"the wake-up time they choose",ins_insurer:"the name of their health insurer",ins_policy:"their insurance policy number",ins_q:"a question about their health insurance policy"};
 function curQuestion(){const m=[...msgsEl.querySelectorAll(".msg:not(.me):not(.sys):not(.sim):not(.typing)")].pop();if(!m||m.classList.contains("wide")||m.querySelector(".card"))return"";
   const c=m.cloneNode(true);c.querySelectorAll(".ts,.ph,button").forEach(x=>x.remove());return c.innerText.trim().slice(0,400)}
 function bypassSmart(x){return S.sim||simEmergency(x)||SAFE_RE.test(x)||(HAS_SIM&&!!detectSymptom(x))||(isRecQuestion(x)&&!!S.record)||WEAR_RE.test(x)||RX_OFF.test(x)||RX_ON.test(x)
@@ -3702,6 +3892,7 @@ function memberContext(){const L2=[];for(const[k,f]of Object.entries(S.facts||{}
   if(S.meal)L2.push(`Last meal: "${S.meal.text}", Meal Quality Score ${S.meal.score}/100`);
   try{const P=primeNow();if(P.r.display.primeScore!=null)L2.push(`Prime Score ${P.r.display.primeScore}/100 (based on ${Math.round(P.r.coverage)}% of measures)`)}catch(e){}
   try{const w=wearInputs();if(w.stepsPerDay)L2.push(`Wearable: ${Math.round(w.stepsPerDay)} steps a day`);if(w.sleepHours)L2.push(`Wearable: ${w.sleepHours.toFixed(1)} h sleep a night`);if(w.restingHr)L2.push(`Wearable resting heart rate ${w.restingHr} bpm`)}catch(e){}
+  if(insOn())L2.push(`Health insurance: ${S.ins.insurer||INS_PLAN.insurer}, ${INS_PLAN.product} ${INS_PLAN.plan} plan, policy ${S.ins.policy}`);
   if(S.plan)L2.push(`Plan this week: ${S.plan.actions.filter(a=>a.kind!=="checkin").map(actTitle).join("; ")}`);
   return L2.join("\n")}
 function healthAnswer(q){later(()=>new Promise(async res=>{const ty=add("typing",'<span class="dots"><i></i><i></i><i></i></span>');const ts=ty.querySelector(".ts");if(ts)ts.remove();
@@ -3723,6 +3914,7 @@ async function smartRoute(x,el){
   if(bypassSmart(x)){route(x,el);return}
   const opts=S.curReplies&&repEl.children.length?S.curReplies:null,isQ=Q_RE.test(x);
   if(opts){const b=S.await?strictMatch(x):vmMatchReply(x);if(b){pickReply([...repEl.children].indexOf(b),el,x);return}}
+  if(isQ&&INS_RE.test(x)&&insOn()&&!S.sim&&!["ins_insurer","ins_policy"].includes(S.await)){maybeReact(el,x,null);insAnswer(x);return}
   /* plain typed answers go straight through; only questions and button-only replies need understanding */
   if(!isQ&&(S.await||!opts)){route(x,el);return}
   later(()=>new Promise(async res=>{const ty=add("typing",'<span class="dots"><i></i><i></i><i></i></span>');const ts=ty.querySelector(".ts");if(ts)ts.remove();
@@ -3767,6 +3959,7 @@ function route(x,el){
     case"sl_q1":case"sl_q2":case"sl_q4":{const m=x.match(/\d+/);if(m&&+m[0]<=10){const n=+m[0];return S.await==="sl_q1"?slOnQ1(n):S.await==="sl_q2"?(S.await=null,clearReplies(),S.sl.q2=n,setFact("sl_reg",{fn:()=>`${n}/10`},"src_chat","cf_conf"),slQ3()):(S.await=null,clearReplies(),S.sl.q4=n,setFact("sl_eff",{fn:()=>`${n}/10`},"src_chat","cf_conf"),slApnea())}break}
     case"sl_q3":{const m=x.match(/\d+(?:[.,]\d)?/);if(m){const h=parseFloat(m[0].replace(",","."));if(h>=2&&h<=14)return slOnQ3(h)}break}
     case"sl_wake":return slOnWake(x);
+    case"ins_insurer":return onInsurer(x);case"ins_policy":return onPolicy(x);case"ins_q":return insAnswer(x);
   }
   if(sens){bot(t("r_"+sens));reprompt();return}
   if(topic){topicReply(topic);if(!S.coreDone)restorePrompt();return}
@@ -3779,14 +3972,14 @@ const stPill=s=>pill("st_"+s,{proposed:"p-mute",accepted:"p-info",active:"p-good
 const kindKey=k=>({move:"k_move",food:"k_food",recipe:"k_recipe",checkin:"k_checkin",sleep:"k_sleep"}[k]);
 function renderHQ(){const un=$("#uName");if(un){un.textContent=S.name||t("hq_member");$("#uAv").textContent=(S.name||t("hq_member")).trim().charAt(0).toUpperCase()}
   document.querySelectorAll("#hqNav button[data-tab]").forEach(b=>b.setAttribute("aria-current",b.dataset.tab===S.hqTab?"page":"false"));
-  hqMain.innerHTML={overview:hqOverview,plan:hqPlan,profile:hqProfile,files:hqFiles,care:hqCare,records:hqRecords,devices:hqDevices}[S.hqTab]();
+  hqMain.innerHTML={overview:hqOverview,plan:hqPlan,profile:hqProfile,files:hqFiles,care:hqCare,records:hqRecords,devices:hqDevices,insurance:hqInsurance}[S.hqTab]();
   if(S.flashAct){const el=hqMain.querySelector(`[data-act="${S.flashAct}"]`);if(el){el.classList.add("flash")}S.flashAct=null}
 }
 function flashHQ(){if($("#stage").dataset.view==="chat"&&innerWidth<=900)$("#hqDot").hidden=false}
 function gauge(n,kind="score"){const c=2*Math.PI*32,off=c*(1-n/100);return`<svg class="gauge ${kind}" viewBox="0 0 78 78" role="img" aria-label="${n} / 100"><circle cx="39" cy="39" r="32" fill="none" stroke="var(--track)" stroke-width="7"/><circle cx="39" cy="39" r="32" fill="none" stroke="${kind==="score"?"url(#gScore)":"var(--teal)"}" stroke-width="7" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${off}" transform="rotate(-90 39 39)"/><text x="39" y="47" text-anchor="middle">${n}</text></svg>`}
 function hqOverview(){
   let h=`<div><h2>${t("ov_title")}${S.name?` · ${esc(S.name)}`:""}</h2></div><p class="hq-sub">${t("ov_sub")}</p>`;
-  if(!S.meal&&!S.plan)return h+(S.care.length||S.record?`<div class="grid2">${carePanel()}${recPanel()}${devPanel()}</div>`:`<div class="empty">${t("ov_empty")}</div>`);
+  if(!S.meal&&!S.plan)return h+(S.care.length||S.record?`<div class="grid2">${carePanel()}${recPanel()}${insPanel()}${devPanel()}</div>`:`<div class="empty">${t("ov_empty")}</div>`);
   const P=primeNow();
   const tile=`<button class="panel click hero mq-card ps-card b-${P.tier||"good"}${P.r.confidence==="low"?" ps-low":""}" id="scoreTile" aria-expanded="${S.scoreOpen}">${primeHead(P,true)}
     <span class="linkbtn" style="align-self:flex-start;padding:0">${S.scoreOpen?t("hide_details"):t("view_details")}</span>
@@ -3798,7 +3991,7 @@ function hqOverview(){
   const ups=`<div class="panel"><h3>${t("updates")}</h3>${S.updates.length?`<ul class="updates">${S.updates.map(u=>`<li><span class="when">${fmtTime(u.date)}</span><span>${u.fn()}</span></li>`).join("")}</ul>`:`<div class="note">${t("no_updates")}</div>`}</div>`;
   const mv=getAct("move");
   const next=mv&&mv.state!=="proposed"?`<div class="panel"><h3>${t("next_up")}</h3><div>${actTitle(mv)}${mv.slot?` · ${t(mv.slot).toLowerCase()}`:""}</div><button class="btn ghost" data-discuss="move" style="align-self:flex-start">${t("discuss")}</button></div>`:"";
-  return h+`<div class="grid2">${tile}${planP}${ups}${next}${carePanel()}${recPanel()}${devPanel()}</div>`}
+  return h+`<div class="grid2">${tile}${planP}${ups}${next}${carePanel()}${recPanel()}${insPanel()}${devPanel()}</div>`}
 function scoreDetail(P){P=P||primeNow();return`<div style="border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:8px;text-align:start">${primeCatList(P)}<p class="note" style="margin:0">${t("mq")}: ${S.meal?`${S.meal.score}/100 · ${PN.nt(S.lang,"band_"+S.meal.band)}`:t("mor")}</p></div>`}
 function hqPlan(){let h=`<div><h2>${t("plan_title")}</h2></div><p class="hq-sub">${t("plan_sub")}</p>`;const p=S.plan;if(!p)return h+`<div class="empty">${t("plan_empty")}</div>`;
   h+=`<div class="panel"><div class="card-h"><h3>${t("focus")}</h3>${stPill(p.status)}</div><div style="font-size:17px;font-weight:600;color:var(--navy)">${t("pr_"+p.focus)}</div><div class="kv"><span class="k">${t("rationale")}</span><span style="text-align:end">${t("why_"+p.focus,{goal:t("goal_"+S.goal).toLowerCase()})}</span><span class="k">${t("rule")}</span><span class="mono">${p.rule}</span></div></div>`;
@@ -3893,6 +4086,7 @@ function loadPersona(){const l=S.lang,P=PERSONA[l];S=fresh();S.lang=l;gen++;chai
   S.name=P.name;S.goal=P.goal;S.fit=P.fit;const src="src_persona";
   setFact("lang",{fn:()=>t("lang_name")},src,"cf_conf");setFact("tz",TZ,"src_device","cf_unconf");setFact("rx",{k:"rx_"+S.rx.pref},"src_default","cf_conf");setFact("name",P.name,src,"cf_conf");setFact("goal",{k:"goal_"+P.goal},src,"cf_conf");
   setFact("age",P.age,src,"cf_conf");setFact("sex",{k:"sex_"+P.sex},src,"cf_conf");setFact("height",`${P.h} cm`,src,"cf_conf");setFact("weight",`${P.w} kg`,src,"cf_conf");setFact("fit",{k:"fit"+P.fit},src,"cf_conf");
+  insSetSilently("LIV-SAH-2026-048213");
   sys(`<span class="sample">${t("sample")}</span> ${t("persona_loaded",{name:esc(P.name)})}`,"sim");renderHQ()}
 $("#pPersona").onclick=()=>{loadPersona();askRecords()};
 $("#pCheckin").onclick=()=>{const a=getAct("move");const d=new Date(Date.now()+2*864e5);d.setHours(19,40,0,0);
