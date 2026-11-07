@@ -793,7 +793,9 @@ li.wc-scope{cursor:default}
     <button id="pSafety" data-t="p_safety">Test safety routing</button>
     <button id="pRec" data-t="p_rec">Connect health records</button>
     <button id="pTri" data-t="p_tri">Check a symptom</button>
-    <button id="pRx" data-t="p_rx">Show emoji reactions example</button>
+    <button id="pSleep" data-t="p_sleep">Start a sleep goal</button>
+    <button id="pMove" data-t="p_move">Start a movement goal</button>
+    <button id="pDiet" data-t="p_diet">Start a diet goal</button>
     <button id="pScanFail" data-t="p_scanfail">Show a scan retry</button>
     <button id="pReset" data-t="p_reset">Start over</button>
   </div>
@@ -1277,7 +1279,7 @@ const RXDEMO={
  en:[["Can you help me plan dinners for the week?","Happy to. Any preferences I should plan around?"],["Vegetarian, please.","Vegetarian it is. Anything else?"],["And under $80.","Got it. Five vegetarian dinners under $80: black bean tacos, lentil soup, veggie stir-fry, chickpea curry and a spinach frittata."],["Could you turn that into a grocery list?","Done. Your grocery list is saved to My Files."],["I cooked the first meal instead of ordering out!","That's a real win. Cooking at home is exactly the kind of step that adds up."],["But I feel guilty about dessert.",null]],
  es:[["¿Me ayudas a planear las cenas de la semana?","Con gusto. ¿Alguna preferencia que deba considerar?"],["Vegetarianas, por favor.","Vegetarianas, perfecto. ¿Algo más?"],["Y por menos de $1,500.","Listo. Cinco cenas vegetarianas por menos de $1,500: tacos de frijol, sopa de lentejas, verduras salteadas, curry de garbanzo y tortilla de espinacas."],["¿Puedes convertirlo en una lista del súper?","Hecho. Tu lista del súper quedó guardada en Mis archivos."],["¡Cociné la primera comida en lugar de pedir a domicilio!","¡Eso es un logro de verdad! Cocinar en casa es justo el tipo de paso que suma."],["Pero me siento culpable por el postre.",null]],
  ar:[["هل يمكنك مساعدتي في تخطيط وجبات العشاء لهذا الأسبوع؟","بكل سرور. هل لديك تفضيلات يجب أن أراعيها؟"],["نباتية من فضلك.","نباتية إذن. هل هناك شيء آخر؟"],["وبأقل من 30 ريالًا.","حسنًا. خمس وجبات عشاء نباتية بأقل من 30 ريالًا: عدس بالخضار، فلافل مشوية، مجدرة، كاري الحمص وعجة السبانخ."],["هل يمكنك تحويلها إلى قائمة مشتريات؟","تم. حُفظت قائمة المشتريات في ملفاتي."],["طبخت أول وجبة بدلًا من الطلب من الخارج!","هذا إنجاز حقيقي. الطبخ في المنزل هو بالضبط نوع الخطوات التي تُحدث فرقًا."],["لكنني أشعر بالذنب بسبب الحلوى.",null]]};
-Object.assign(L.en,{p_rx:"Show emoji reactions example",rx_example:"Example conversation",rx_aria:"ELIA reacted: {topic}",f_rx:"Emoji reactions",rx_on:"Occasional",rx_off:"Off",src_default:"Default setting",
+Object.assign(L.en,{p_sleep:"Start a sleep goal",p_move:"Start a movement goal",p_diet:"Start a diet goal",qa_sleep:"Quick action · sleep goal",qa_energy:"Quick action · movement goal",qa_weight:"Quick action · movement goal",qa_general:"Quick action · movement goal",qa_eat:"Quick action · diet goal",p_rx:"Show emoji reactions example",rx_example:"Example conversation",rx_aria:"ELIA reacted: {topic}",f_rx:"Emoji reactions",rx_on:"Occasional",rx_off:"Off",src_default:"Default setting",
  rxt_meals:"Meals",rxt_snacks:"Snacks",rxt_grocery:"Grocery shopping",rxt_hydration:"Hydration",rxt_sleep:"Sleep",rxt_walking:"Walking",rxt_exercise:"Exercise",rxt_relax:"Relaxation",rxt_appointments:"Appointments",rxt_reminders:"Reminders",rxt_providers:"Finding care",rxt_benefits:"Insurance and benefits",rxt_trends:"Trends",rxt_wearables:"Devices",rxt_goals:"Goals",rxt_learning:"Learning",rxt_achievement:"Your achievement",rxt_thanks:"Thanks",
  rx_off_msg:"Done. I'll stop reacting to your messages with emojis. You can turn them back on anytime in ELIA HQ.",rx_on_msg:"Okay, I'll react now and then when it fits.",eff_rx_on:"I'll react to your messages now and then.",eff_rx_off:"I won't react to your messages with emojis.",
  r_med:"I can't advise on medication doses or changes. Please check with your doctor or pharmacist before changing anything, and contact them today if you feel unwell.",
@@ -1287,7 +1289,7 @@ Object.assign(L.en,{p_rx:"Show emoji reactions example",rx_example:"Example conv
  r_complaint:"Thanks for telling me. Which part looks wrong? I'll correct it.",r_frustration:"That sounds frustrating. Tell me what's going on and I'll help where I can.",
  r_ach:"That's a real win. Steps like that are exactly what adds up.",r_thx:"Anytime. I'm here when you need me.",r_meals:"Happy to help with meals.",r_grocery_none:"Let's pick a recipe first, then I'll turn it into a list.",r_move:"Your plan has {act}. Want a quick warm-up now?",
  r_noted:"I've noted that you'd like help with {topic}. For now your plan focuses on movement and meals, and I'll bring {topic} in as your plan grows.",shopweek:"Black beans, lentils, mixed vegetables, chickpeas, spinach, eggs, tortillas"});
-Object.assign(L.es,{p_rx:"Ver ejemplo de reacciones",rx_example:"Conversación de ejemplo",rx_aria:"ELIA reaccionó: {topic}",f_rx:"Reacciones con emoji",rx_on:"Ocasionales",rx_off:"Desactivadas",src_default:"Configuración predeterminada",
+Object.assign(L.es,{p_sleep:"Iniciar meta de sueño",p_move:"Iniciar meta de movimiento",p_diet:"Iniciar meta de alimentación",qa_sleep:"Acción rápida · meta de sueño",qa_energy:"Acción rápida · meta de movimiento",qa_weight:"Acción rápida · meta de movimiento",qa_general:"Acción rápida · meta de movimiento",qa_eat:"Acción rápida · meta de alimentación",p_rx:"Ver ejemplo de reacciones",rx_example:"Conversación de ejemplo",rx_aria:"ELIA reaccionó: {topic}",f_rx:"Reacciones con emoji",rx_on:"Ocasionales",rx_off:"Desactivadas",src_default:"Configuración predeterminada",
  rxt_meals:"Comidas",rxt_snacks:"Colaciones",rxt_grocery:"Compras del súper",rxt_hydration:"Hidratación",rxt_sleep:"Sueño",rxt_walking:"Caminar",rxt_exercise:"Ejercicio",rxt_relax:"Relajación",rxt_appointments:"Citas",rxt_reminders:"Recordatorios",rxt_providers:"Buscar atención",rxt_benefits:"Seguro y beneficios",rxt_trends:"Tendencias",rxt_wearables:"Dispositivos",rxt_goals:"Metas",rxt_learning:"Aprender",rxt_achievement:"Tu logro",rxt_thanks:"Agradecimiento",
  rx_off_msg:"Listo. Ya no reaccionaré a tus mensajes con emojis. Puedes volver a activarlas cuando quieras en ELIA HQ.",rx_on_msg:"Va, reaccionaré de vez en cuando si viene al caso.",eff_rx_on:"Reaccionaré a tus mensajes de vez en cuando.",eff_rx_off:"No reaccionaré a tus mensajes con emojis.",
  r_med:"No puedo dar indicaciones sobre dosis o cambios de medicamentos. Consulta a tu médico o farmacéutico antes de cambiar algo, y comunícate hoy si te sientes mal.",
@@ -1297,7 +1299,7 @@ Object.assign(L.es,{p_rx:"Ver ejemplo de reacciones",rx_example:"Conversación d
  r_complaint:"Gracias por avisarme. ¿Qué parte está mal? La corrijo.",r_frustration:"Suena frustrante. Cuéntame qué pasa y te ayudo en lo que pueda.",
  r_ach:"¡Eso es un logro de verdad! Pasos así son los que suman.",r_thx:"Cuando quieras. Aquí estoy.",r_meals:"Con gusto te ayudo con tus comidas.",r_grocery_none:"Primero elijamos una receta y luego la convierto en lista.",r_move:"Tu plan incluye {act}. ¿Hacemos un calentamiento rápido?",
  r_noted:"Anoté que quieres ayuda con {topic}. Por ahora tu plan se enfoca en movimiento y comidas, e iré sumando {topic} conforme avance tu plan.",shopweek:"Frijoles, lentejas, verduras mixtas, garbanzos, espinacas, huevo, tortillas"});
-Object.assign(L.ar,{p_rx:"عرض مثال على التفاعلات",rx_example:"محادثة نموذجية",rx_aria:"تفاعلت ELIA: {topic}",f_rx:"التفاعل بالإيموجي",rx_on:"أحيانًا",rx_off:"متوقف",src_default:"الإعداد الافتراضي",
+Object.assign(L.ar,{p_sleep:"ابدأ هدف النوم",p_move:"ابدأ هدف الحركة",p_diet:"ابدأ هدف التغذية",qa_sleep:"إجراء سريع · هدف النوم",qa_energy:"إجراء سريع · هدف الحركة",qa_weight:"إجراء سريع · هدف الحركة",qa_general:"إجراء سريع · هدف الحركة",qa_eat:"إجراء سريع · هدف التغذية",p_rx:"عرض مثال على التفاعلات",rx_example:"محادثة نموذجية",rx_aria:"تفاعلت ELIA: {topic}",f_rx:"التفاعل بالإيموجي",rx_on:"أحيانًا",rx_off:"متوقف",src_default:"الإعداد الافتراضي",
  rxt_meals:"الوجبات",rxt_snacks:"الوجبات الخفيفة",rxt_grocery:"التسوق",rxt_hydration:"شرب الماء",rxt_sleep:"النوم",rxt_walking:"المشي",rxt_exercise:"التمارين",rxt_relax:"الاسترخاء",rxt_appointments:"المواعيد",rxt_reminders:"التذكيرات",rxt_providers:"البحث عن رعاية",rxt_benefits:"التأمين والمزايا",rxt_trends:"الاتجاهات",rxt_wearables:"الأجهزة",rxt_goals:"الأهداف",rxt_learning:"التعلّم",rxt_achievement:"إنجازك",rxt_thanks:"الشكر",
  rx_off_msg:"تم. لن أتفاعل مع رسائلك بالإيموجي بعد الآن. يمكنك إعادة تفعيلها في أي وقت من ELIA HQ.",rx_on_msg:"حسنًا، سأتفاعل أحيانًا عندما يكون ذلك مناسبًا.",eff_rx_on:"سأتفاعل مع رسائلك أحيانًا.",eff_rx_off:"لن أتفاعل مع رسائلك بالإيموجي.",
  r_med:"لا يمكنني تقديم نصيحة بشأن جرعات الأدوية أو تغييرها. يرجى مراجعة طبيبك أو الصيدلي قبل تغيير أي شيء، وتواصل معهم اليوم إذا شعرت بتوعك.",
@@ -3544,7 +3546,7 @@ function renderMeal(text,est){
   if(fb.autoSnack)bot(`<p>${esc(fb.autoSnack)}</p>`,{delay:400});
   bot(`<div class="mq-tips" data-mqid="${S.meal.id}">${tipsHtml(r,fb)}</div>`);
   addUpdate(()=>`${t("mq")}: ${r.score}/100`);renderHQ();
-  offerScan()}
+  if(S.afterMeal){const f=S.afterMeal;S.afterMeal=null;later(f)}else offerScan()}
 function offerScan(){bot(t("offer_scan"));replies([[t("scan_start"),openScan],[t("scan_skip"),()=>{S.scan="skipped";profile()}]])}
 
 /* scan modal (NuraLogix placeholder) */
@@ -3887,11 +3889,12 @@ $("#presToggle").onclick=()=>{const p=$("#presenter");p.hidden=!p.hidden;$("#pre
 function fitPhone(){const ph=document.querySelector(".phone");if(!ph||ph.offsetParent===null)return;const vh=(window.visualViewport&&visualViewport.height)||innerHeight;const top=Math.max(16,ph.getBoundingClientRect().top+Math.min(window.scrollY,0));const h=Math.round(Math.max(360,Math.min(820,vh-top-16)));ph.style.minHeight="360px";ph.style.height=h+"px";requestAnimationFrame(()=>{const m=document.getElementById("msgs");if(m)m.scrollTop=m.scrollHeight})}
 window.addEventListener("resize",fitPhone);if(window.visualViewport)visualViewport.addEventListener("resize",fitPhone);
 $("#pReset").onclick=()=>{const l=S.lang;S=fresh();S.lang=l;setLang(l);start()};
-$("#pPersona").onclick=()=>{const l=S.lang,P=PERSONA[l];S=fresh();S.lang=l;gen++;chain=Promise.resolve();msgsEl.innerHTML="";clearReplies();setLang(l);S.persona=true;
+function loadPersona(){const l=S.lang,P=PERSONA[l];S=fresh();S.lang=l;gen++;chain=Promise.resolve();msgsEl.innerHTML="";clearReplies();setLang(l);S.persona=true;
   S.name=P.name;S.goal=P.goal;S.fit=P.fit;const src="src_persona";
   setFact("lang",{fn:()=>t("lang_name")},src,"cf_conf");setFact("tz",TZ,"src_device","cf_unconf");setFact("rx",{k:"rx_"+S.rx.pref},"src_default","cf_conf");setFact("name",P.name,src,"cf_conf");setFact("goal",{k:"goal_"+P.goal},src,"cf_conf");
   setFact("age",P.age,src,"cf_conf");setFact("sex",{k:"sex_"+P.sex},src,"cf_conf");setFact("height",`${P.h} cm`,src,"cf_conf");setFact("weight",`${P.w} kg`,src,"cf_conf");setFact("fit",{k:"fit"+P.fit},src,"cf_conf");
-  sys(`<span class="sample">${t("sample")}</span> ${t("persona_loaded",{name:esc(P.name)})}`,"sim");renderHQ();askRecords()};
+  sys(`<span class="sample">${t("sample")}</span> ${t("persona_loaded",{name:esc(P.name)})}`,"sim");renderHQ()}
+$("#pPersona").onclick=()=>{loadPersona();askRecords()};
 $("#pCheckin").onclick=()=>{const a=getAct("move");const d=new Date(Date.now()+2*864e5);d.setHours(19,40,0,0);
   const when=d.toLocaleString(LOCALE[S.lang],{weekday:"short",hour:"numeric",minute:"2-digit"});
   sys(t("sim",{when}));
@@ -3899,7 +3902,13 @@ $("#pCheckin").onclick=()=>{const a=getAct("move");const d=new Date(Date.now()+2
   replies([[t("ci_done"),()=>{bot(t("ci_done_msg"));addUpdate(()=>`${t("k_checkin")}: ${t("ci_done")}`);renderHQ();if(S.coreDone)coreReplies()},{react:"achievement"}],[t("ci_missed"),()=>{bot(t("ci_missed_msg"));replies([["bar_time"],["bar_tired"],["bar_weather"]].map(([k])=>[t(k),()=>{bot(t("ci_bar_msg"));if(S.coreDone)coreReplies()}]))}],[t("ci_skip"),()=>{bot(t("ci_skip_msg"));if(S.coreDone)coreReplies()}]])};
 $("#pRec").onclick=()=>{setView("chat");if(S.record){S.hqTab="records";renderHQ();setView("hq");return}openConnect(()=>recConnectedMsg())};
 $("#pTri").onclick=()=>{setView("chat");pickSymptom()};
-$("#pRx").onclick=()=>{gen++;chain=Promise.resolve();clearReplies();S.await=null;S.rx.turn=0;S.rx.last=-99;S.rx.times=[];
+/* Quick goal starts: begin a pillar from wherever the demo is (an example member is loaded first if nobody has onboarded) */
+function qaStart(goal){setView("chat");gen++;chain=Promise.resolve();clearReplies();S.await=null;S.curReplies=null;if(!S.name){loadPersona();S.langChosen=true}
+  S.goal=goal;setFact("goal",{k:"goal_"+goal},"src_chat","cf_conf");renderHQ();sys(t("qa_"+goal))}
+$("#pSleep").onclick=()=>{qaStart("sleep");S.sleepDone=false;S.sl={};S.slNext=S.plan?coreDone:profile;askSleep()};
+$("#pMove").onclick=()=>{qaStart(S.goal&&S.goal!=="sleep"&&S.goal!=="eat"?S.goal:"energy");if(!S.plan){S.plan=buildPlan("move",false);S.plan.status="accepted";S.plan.actions.forEach(a=>a.state="accepted")}else if(!getAct("move")){S.plan.actions.unshift(moveAction(20,"freq3"))}S.mv={};askInjury()};
+$("#pDiet").onclick=()=>{qaStart("eat");S.afterMeal=S.plan?()=>{S.kitchenOffered=false;afterMove()}:null;askMeal()};
+if($("#pRx"))$("#pRx").onclick=()=>{gen++;chain=Promise.resolve();clearReplies();S.await=null;S.rx.turn=0;S.rx.last=-99;S.rx.times=[];
   sys(t("rx_example"));
   RXDEMO[S.lang].forEach(([u,b],i)=>{later(()=>new Promise(r=>setTimeout(r,reduced?50:(i?1100:300))));run(()=>{const el=user(esc(u));maybeReact(el,u,rxSensitive(u)?null:rxTopic(u))});
     bot(b||t("r_guilt"));if(i===3)run(()=>{addFile({id:"shopweek",type:"shop",title:()=>t("file_shop"),body:()=>`<p style="margin:0">${t("shopweek")}</p>`});renderHQ()})});
