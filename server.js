@@ -418,41 +418,7 @@ async function liveStart(req, res) {
   if (!allowed(clientIp(req), "live", 20)) return send(res, 429, { error: "rate_limited" });
   let b = {};
   try { b = await readJson(req, 64 * 1024); } catch { return send(res, 400, { error: "bad_request" }); }
-  // diagnostic: which audio/live models can this key actually see?
-  if (b.probe === true) {
-    try {
-      const pr = await fetch("https://api.openai.com/v1/models", { headers: { Authorization: `Bearer ${OPENAI_KEY}` } });
-      const pj = await pr.json().catch(() => ({}));
-      const names = ((pj && pj.data) || []).map((m) => m.id);
-      const one = await fetch(`https://api.openai.com/v1/models/${encodeURIComponent(LIVE_MODEL)}`, { headers: { Authorization: `Bearer ${OPENAI_KEY}` } });
-      const oj = await one.json().catch(() => ({}));
-      return send(res, 200, { status: pr.status, total: names.length,
-        audio: names.filter((n) => /live|realtime|audio|tts|whisper/.test(n)).sort(),
-        model: LIVE_MODEL, modelStatus: one.status, modelBody: (oj.error && oj.error.message) || oj.id || null });
-    } catch (e) { return send(res, 200, { probeError: e.message }); }
-  }
   const lang = ["en", "es", "ar"].includes(b.lang) ? b.lang : "en";
-  // diagnostic: try several session shapes with one real SDP offer to find which field is refused
-  if (b.probeSession === true && typeof b.sdp === "string") {
-    const inst = liveInstructions("en", "");
-    const resp = { type: "responses", responses: { parallel_tool_calls: false, model: "gpt-6-luna", reasoning: { effort: "medium" } } };
-    const variants = {
-      A_playground: { model: LIVE_MODEL, audio: { output: { voice: "gleam" } }, delegation: resp },
-      B_gleam_client: { model: LIVE_MODEL, audio: { output: { voice: "gleam" } }, delegation: { type: "client" } },
-      C_marin_resp: { model: LIVE_MODEL, audio: { output: { voice: "marin" } }, delegation: resp },
-      D_gleam_client_instr: { model: LIVE_MODEL, instructions: inst, audio: { output: { voice: "gleam" } }, delegation: { type: "client" } },
-      E_bare: { model: LIVE_MODEL },
-    };
-    const out = {};
-    for (const [name, session] of Object.entries(variants)) {
-      try {
-        const rr = await fetch(OPENAI_LIVE_URL, { method: "POST", headers: { Authorization: `Bearer ${OPENAI_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ session, transport: { type: "webrtc", sdp: b.sdp } }) });
-        const tx = await rr.text(); let jj = {}; try { jj = JSON.parse(tx); } catch {}
-        out[name] = rr.ok ? "OK " + ((jj.session && jj.session.id) || jj.id || "") : rr.status + " " + ((jj.error && jj.error.message) || tx.slice(0, 160));
-      } catch (e) { out[name] = "ERR " + e.message; }
-    }
-    return send(res, 200, out);
-  }
   if (process.env.LIVE_MOCK) return send(res, 200, { id: "live-mock-" + Date.now(), mock: true, model: LIVE_MODEL, voice: LIVE_VOICE });
   if (typeof b.sdp !== "string" || !/^v=0/m.test(b.sdp)) return send(res, 400, { error: "bad_sdp" });
   const session = { model: LIVE_MODEL, instructions: liveInstructions(lang, String(b.context || "").slice(0, 2000)), delegation: { type: "client" }, audio: { output: { voice: LIVE_VOICE } } };
