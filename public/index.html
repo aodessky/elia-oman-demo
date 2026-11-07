@@ -746,7 +746,9 @@ li.wc-scope{cursor:default}
 @keyframes vmThink{0%,100%{scale:.94;opacity:.85}50%{scale:1;opacity:1}}
 @media (prefers-reduced-motion:reduce){.vm .vm-core,.vm .vm-glow{animation:none!important;transition:none}}
 .vm-cap{min-height:96px;display:flex;flex-direction:column;gap:8px;text-align:center}
-.vm.tv-on .vm-cap,.vm.tv-on .vm-chips{display:none}
+.vm.tv-on .vm-cap,.vm.tv-on .vm-chips,.vm.live .vm-cap,.vm.live .vm-chips{display:none}
+.vm-eng{display:inline-flex;border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:2px;gap:2px}.vm-eng button{border:0;background:transparent;color:inherit;font:600 11.5px var(--f-body);padding:3px 9px;border-radius:999px;opacity:.75;cursor:pointer}.vm-eng button[aria-pressed="true"]{background:rgba(255,255,255,.22);opacity:1}
+.vm.live.talking .vm-orb{filter:brightness(1.15)}
 .vm.tv-on .vm-mid{flex:1;min-height:0;display:grid;place-items:center;align-content:center}
 .vm-bot p{margin:2px 0 0;font:500 16px/1.4 var(--f-body);max-height:6.9em;overflow:auto}
 .vm-who{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7fe6d9}
@@ -770,6 +772,7 @@ li.wc-scope{cursor:default}
 </style>
 <script type="module" src="/dfx-scan.js"></script>
 <script type="module" src="/tavus.js"></script>
+<script type="module" src="/live.js"></script>
 </head>
 <body>
 <div id="app" dir="ltr" lang="en">
@@ -2386,7 +2389,7 @@ const VM={on:false,ttsOnly:false,listening:false,speaking:false,muted:false,queu
 const VM_LANG={en:"en-US",es:"es-MX",ar:"ar-SA"};
 const VM_ORB='<span class="vm-core"></span><span class="vm-glow"></span>';
 function vmEl(){let v=document.getElementById("vm");if(v)return v;v=document.createElement("div");v.id="vm";v.className="vm";v.hidden=true;v.setAttribute("role","dialog");v.setAttribute("aria-label","Voice mode");
-  v.innerHTML=`<div class="vm-top"><span class="vm-title"></span><span class="vm-state" role="status" aria-live="polite"></span><button type="button" class="vm-x" data-vm="close" aria-label="End voice mode">✕</button></div>
+  v.innerHTML=`<div class="vm-top"><span class="vm-title"></span><span class="vm-eng" hidden><button type="button" data-vm="eng-avatar"></button><button type="button" data-vm="eng-live"></button></span><span class="vm-state" role="status" aria-live="polite"></span><button type="button" class="vm-x" data-vm="close" aria-label="End voice mode">✕</button></div>
   <div class="vm-mid"><button type="button" class="vm-orb" data-vm="orb">${VM_ORB}</button><button type="button" class="vm-av" data-vm="orb" aria-label="ELIA"><video playsinline autoplay muted></video></button><audio class="vm-aud" autoplay></audio></div>
   <div class="vm-cap"><div class="vm-bot"><span class="vm-who"></span><p></p></div><p class="vm-user" dir="auto"></p></div>
   <div class="vm-chips"></div>
@@ -2395,11 +2398,12 @@ function vmEl(){let v=document.getElementById("vm");if(v)return v;v=document.cre
   document.querySelector(".phone").appendChild(v);
   v.addEventListener("click",e=>{const b=e.target.closest("[data-vm],[data-vmchip]");if(!b)return;
     if(b.dataset.vmchip!=null){const btn=repEl.querySelectorAll("button")[+b.dataset.vmchip];if(btn){vmStopListen();vmCap(null,btn.textContent);btn.click()}return}
-    const a=b.dataset.vm;if(a==="close")vmClose();else if(a==="mute")vmMute();else if(a==="tts")vmTtsOnly();else if(a==="orb")vmOrb()});
+    const a=b.dataset.vm;if(a==="close")vmClose();else if(a==="mute")vmMute();else if(a==="tts")vmTtsOnly();else if(a==="orb")vmOrb();else if(a==="eng-avatar"||a==="eng-live")vmSetEngine(a.slice(4))});
   return v}
 function vmText(){const v=vmEl();v.querySelector(".vm-title").textContent=t("vm_title");v.querySelector('[data-vm="mute"] span').textContent=VM.muted?t("vm_unmute"):t("vm_mute");
   v.querySelector(".vm-ctl .end span").textContent=t("vm_end");const n=v.querySelector(".vm-nomic");n.querySelector("b").textContent=t("vm_nomic_t");n.querySelector("p").textContent=t("vm_nomic_d");
-  n.querySelector('[data-vm="tts"]').textContent=t("vm_tts");n.querySelector('.vm-na [data-vm="close"]').textContent=t("vm_close")}
+  n.querySelector('[data-vm="tts"]').textContent=t("vm_tts");n.querySelector('.vm-na [data-vm="close"]').textContent=t("vm_close");
+  const eg=v.querySelector(".vm-eng");eg.querySelector('[data-vm="eng-avatar"]').textContent=t("vm_eng_avatar");eg.querySelector('[data-vm="eng-live"]').textContent=t("vm_eng_live");const both=!!(window.EliaTavus&&EliaTavus.enabled&&window.EliaLive&&EliaLive.enabled);eg.hidden=!both;eg.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.vm==="eng-"+vmEngine())))}
 function vmState(s){VM.st=s;const v=vmEl();v.dataset.state=s;v.querySelector(".vm-state").textContent=t(s==="listening"&&VM.duplex?"vm_listen_dx":{listening:"vm_listen",thinking:"vm_think",speaking:"vm_speak",paused:"vm_paused",muted:"vm_muted"}[s]||"vm_paused")}
 function vmCap(bot,user,who){const v=vmEl();if(bot!=null){v.querySelector(".vm-bot p").textContent=bot;v.querySelector(".vm-who").textContent=who==="sim"?(S.lang==="ar"?"سيم":"Sim"):"ELIA";v.querySelector(".vm-bot").dataset.who=who||"elia"}if(user!=null)v.querySelector(".vm-user").textContent=user}
 function vmChips(){if(!VM.on||VM.ttsOnly)return;const v=vmEl(),c=v.querySelector(".vm-chips"),btns=[...repEl.querySelectorAll("button")];
@@ -2441,25 +2445,46 @@ The member said: """${q}"""`}],{modelTier:"default",cache:false});
     const a=(r&&r.text||"").replace(/\*\*/g,"").replace(/\s+/g," ").trim();if(!a)return t("vm_noai");
     VM.hist.push({role:"user",content:q},{role:"assistant",content:a});return a}
   catch(e){return t("vm_noai")}}
+/* ---- voice engine: Tavus avatar (face + Cartesia voice) or OpenAI GPT-Live (voice only, faster turns) ---- */
+function vmEngine(){const T=window.EliaTavus&&EliaTavus.enabled,Lv=window.EliaLive&&EliaLive.enabled;let e=VM.engine;try{e=e||localStorage.getItem("elia_voice_engine")}catch(x){}if(e==="live"&&Lv)return"live";if(e==="avatar"&&T)return"avatar";return T?"avatar":Lv?"live":"none"}
+function vmSetEngine(e){if(vmEngine()===e)return;VM.engine=e;try{localStorage.setItem("elia_voice_engine",e)}catch(x){}const was=VM.on&&!VM.ttsOnly;vmClose();if(was)setTimeout(vmOpen,250)}
+function vmLiveStart(){const Lv=window.EliaLive;if(!Lv||VM.live)return Promise.resolve(false);const v=vmEl();
+  return Promise.resolve(Lv.ready).then(async ok=>{if(!ok||!VM.on||VM.ttsOnly)return false;VM.live="starting";v.classList.add("live");vmCap(t("vm_connect"),null,"elia");
+    const fail=why=>{console.warn("GPT-Live unavailable:",why);VM.live=null;VM.duplex=false;v.classList.remove("live","talking");try{Lv.stop()}catch(e){}};
+    try{await Lv.start({onAudio:st=>{const a=v.querySelector(".vm-aud");a.srcObject=st;a.play().catch(()=>{})},
+        onStarted:()=>{VM.tvTalking=true;v.classList.add("talking");vmState("speaking")},
+        onStopped:()=>{VM.tvTalking=false;v.classList.remove("talking");vmState(VM.muted?"muted":"listening")},
+        onDelegate:q=>vmDuplexTurn(q),
+        onEmergency:txt=>{if(!VM.emergSaid&&(SAFE_RE.test(txt)||(typeof simEmergency==="function"&&simEmergency(txt)))){VM.emergSaid=true;Lv.say(t("vm_emerg_line",{num:t("emerg_val")}));return true}return false},
+        onClosed:why=>{if(!VM.on||VM.live!=="ready")return;VM.live=null;VM.duplex=false;vmState("paused");vmCap(t("vm_live_ended"),null,"elia")},
+        onError:e=>console.warn("GPT-Live:",e)},{lang:S.lang,context:`The member's name is ${S.name||"unknown"}. Language: ${LANG_NAME[S.lang]}.`})}
+    catch(e){fail(e&&e.message);return false}
+    if(!VM.on){try{Lv.stop()}catch(e){}return false}
+    VM.live="ready";VM.duplex=true;VM.emergSaid=false;vmStopListen();vmRelease();v.classList.add("duplex");VM.queue=[];VM.speaking=false;vmState("listening");
+    setTimeout(()=>{try{if(VM.live==="ready")Lv.think(`Member data ELIA can use:\n${memberContext()||"(nothing collected yet)"}`)}catch(e){}},900);
+    return true})}
+function vmLiveStop(){if(!VM.live)return;VM.live=null;VM.duplex=false;try{window.EliaLive&&EliaLive.stop()}catch(e){}const v=document.getElementById("vm");if(v){v.classList.remove("live","talking","duplex");const a=v.querySelector(".vm-aud");if(a)a.srcObject=null}}
 function vmTavusStop(){if(!VM.tv)return;VM.tv=null;VM.duplex=false;clearTimeout(VM.tvTo);clearTimeout(VM.tvGuard);VM.tvItem=null;try{window.EliaTavus&&EliaTavus.stop()}catch(e){}
   const v=document.getElementById("vm");if(v){v.classList.remove("tv","tv-on","talking");const el=v.querySelector(".vm-av video");if(el)el.srcObject=null;const a=v.querySelector(".vm-aud");if(a)a.srcObject=null}}
 /* ---- open / close ---- */
 async function vmOpen(){if(VM.on&&!VM.ttsOnly)return;vmAudioUnlock();appConfig();vmPill(false);const v=vmEl();vmText();v.hidden=false;v.querySelector(".vm-nomic").hidden=true;VM.on=true;VM.ttsOnly=false;VM.muted=false;VM.queue=[];
-  vmCap("", "");vmChips();vmState("thinking");vmTavusStart();
+  vmCap("", "");vmChips();vmState("thinking");
+  if(vmEngine()==="live"){const ok=await vmLiveStart();if(ok||!VM.on)return}
+  vmTavusStart();
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   try{if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)VM.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}})}catch(e){VM.stream=null}
   if(!VM.on)return vmRelease();
   if(!SR||!VM.stream){vmNoMic();return}
   try{VM.ac=new (window.AudioContext||window.webkitAudioContext)();const src=VM.ac.createMediaStreamSource(VM.stream);VM.an=VM.ac.createAnalyser();VM.an.fftSize=512;src.connect(VM.an);vmMeter()}catch(e){}
-  if(!(window.EliaTavus&&EliaTavus.enabled))vmSay(t("vm_hello"),"elia")}
+  if(!(window.EliaTavus&&EliaTavus.enabled)&&!VM.live)vmSay(t("vm_hello"),"elia")}
 function vmNoMic(){const v=vmEl();v.querySelector(".vm-nomic").hidden=false;vmState("paused");v.querySelector(".vm-nomic .btn").focus()}
 function vmRelease(){if(VM.stream)VM.stream.getTracks().forEach(x=>x.stop());VM.stream=null;if(VM.ac)VM.ac.close().catch(()=>{});VM.ac=null;VM.an=null;cancelAnimationFrame(VM.raf)}
-function vmClose(){VM.on=false;VM.ttsOnly=false;VM.queue=[];clearTimeout(VM.idleT);vmStopListen();vmStopAudio();vmTavusStop();VM.speaking=false;vmRelease();const v=document.getElementById("vm");if(v)v.hidden=true;vmPill(false);$("#inp").focus()}
+function vmClose(){VM.on=false;VM.ttsOnly=false;VM.queue=[];clearTimeout(VM.idleT);vmStopListen();vmStopAudio();vmTavusStop();vmLiveStop();VM.speaking=false;vmRelease();const v=document.getElementById("vm");if(v)v.hidden=true;vmPill(false);$("#inp").focus()}
 function vmTtsOnly(){vmAudioUnlock();vmRelease();VM.ttsOnly=true;VM.on=true;const v=vmEl();v.hidden=true;vmPill(true);vmSay(t("vm_tts_on"),"elia")}
 function vmPill(show){let p=document.getElementById("vmPill");if(!p){p=document.createElement("div");p.id="vmPill";p.className="vm-pill";p.hidden=true;document.getElementById("composer").before(p);
     p.addEventListener("click",e=>{if(e.target.closest("[data-vmoff]"))vmClose()})}
   p.innerHTML=`<span>🔊 ${t("vm_pill")}</span><button type="button" data-vmoff>${t("vm_off")}</button>`;p.hidden=!show}
-function vmMute(){VM.muted=!VM.muted;vmText();if(VM.duplex){try{EliaTavus.setMic(!VM.muted)}catch(e){}vmState(VM.muted?"muted":"listening");return}if(VM.muted){vmStopListen();vmState("muted")}else vmMaybeListen(0)}
+function vmMute(){VM.muted=!VM.muted;vmText();if(VM.duplex){try{if(VM.live)EliaLive.setMic(!VM.muted);else EliaTavus.setMic(!VM.muted)}catch(e){}vmState(VM.muted?"muted":"listening");return}if(VM.muted){vmStopListen();vmState("muted")}else vmMaybeListen(0)}
 function vmOrb(){if(VM.speaking){VM.queue=[];vmStopAudio();VM.speaking=false;vmListen();return}if(VM.listening){vmStopListen();vmState("paused");return}vmListen()}
 function vmMeter(){const buf=new Uint8Array(256);const tick=()=>{if(!VM.an)return;VM.an.getByteTimeDomainData(buf);let s=0;for(const x of buf){const d=(x-128)/128;s+=d*d}const lvl=Math.min(1,Math.sqrt(s/buf.length)*5);
     const orb=document.querySelector(".vm-orb");if(orb&&VM.listening)orb.style.setProperty("--lvl",lvl.toFixed(3));VM.raf=requestAnimationFrame(tick)};tick()}
@@ -2532,6 +2557,7 @@ function vmHeard(text){vmCap(null,text);if(/^(?:stop|end voice( mode)?|exit voic
   vmState("thinking");const b=S.await?strictMatch(text):vmMatchReply(text);
   if(b){b.click()}else{const i=$("#inp");i.value=text;$("#composer").requestSubmit()}
   vmMaybeListen(1500)}
+Object.assign(L.en,{vm_eng_avatar:"Avatar",vm_eng_live:"Voice",vm_live_ended:"The call ended. Tap the orb or reopen voice mode to continue."});Object.assign(L.es,{vm_eng_avatar:"Avatar",vm_eng_live:"Voz",vm_live_ended:"La llamada terminó. Vuelve a abrir el modo de voz para continuar."});Object.assign(L.ar,{vm_eng_avatar:"الصورة",vm_eng_live:"الصوت",vm_live_ended:"انتهت المكالمة. أعد فتح وضع الصوت للمتابعة."});
 Object.assign(L.en,{vm_title:"Voice",vm_connect:"Connecting to ELIA…",vm_bye:"Okay, talk soon.",vm_hello_qa:"Hi, I'm ELIA. Ask me anything about your health.",vm_noai:"I couldn't reach my answers just now. Could you ask that again in a moment?",vm_emerg_line:"That could be an emergency. Please call {num} right now. I'm here, but a person needs to help you.",vm_listen_dx:"Listening · just talk, you can interrupt me",vm_listen:"Listening…",vm_think:"Thinking…",vm_speak:"Speaking · tap to interrupt",vm_paused:"Paused · tap the orb to talk",vm_muted:"Mic off",vm_say:"You can say",vm_hello:"I'm listening. Go ahead.",vm_end:"End",vm_mute:"Mute",vm_unmute:"Unmute",
  vm_nomic_t:"Voice input isn't available here",vm_nomic_d:"This view doesn't allow the microphone. I can still read my replies aloud while you type, or use the standalone version for full voice conversation.",vm_tts:"Read replies aloud",vm_close:"Close",vm_tts_on:"Okay, I'll read my replies aloud.",vm_pill:"Spoken replies on",vm_off:"Turn off",vm_emerg:"This may be an emergency",vm_btn:"Voice mode"});
 Object.assign(L.es,{vm_title:"Voz",vm_connect:"Conectando con ELIA…",vm_bye:"Listo, hablamos pronto.",vm_hello_qa:"Hola, soy ELIA. Pregúntame lo que quieras sobre tu salud.",vm_noai:"No pude conectar con mis respuestas en este momento. ¿Me lo preguntas de nuevo en un momento?",vm_emerg_line:"Eso podría ser una emergencia. Por favor llama al {num} ahora mismo. Aquí estoy, pero una persona debe ayudarte.",vm_listen_dx:"Escuchando · solo habla, puedes interrumpirme",vm_listen:"Escuchando…",vm_think:"Pensando…",vm_speak:"Hablando · toca para interrumpir",vm_paused:"En pausa · toca el círculo para hablar",vm_muted:"Micrófono apagado",vm_say:"Puedes decir",vm_hello:"Te escucho. Adelante.",vm_end:"Terminar",vm_mute:"Silenciar",vm_unmute:"Activar mic",

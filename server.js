@@ -395,15 +395,52 @@ async function tavusEnd(req, res) {
   return send(res, 200, { ok: true });
 }
 
+
+/* ---------- OpenAI GPT-Live: full-duplex voice (voice-only mode, no avatar) ----------
+   The browser creates a WebRTC offer; this server holds the OpenAI key, creates the Live session with client delegation and returns the
+   SDP answer. Health answers stay grounded: the page runs its own Claude path when the model delegates and hands the text back as commentary. */
+const OPENAI_KEY = (process.env.OPENAI_API_KEY || "").trim();
+const OPENAI_LIVE_URL = process.env.OPENAI_LIVE_URL || "https://api.openai.com/v1/live/sessions";
+const LIVE_MODEL = process.env.OPENAI_LIVE_MODEL || "gpt-live-1";
+const LIVE_VOICE = process.env.OPENAI_LIVE_VOICE || "marin";
+const LIVE_LANG = { en: "English", es: "Spanish", ar: "Arabic" };
+function liveInstructions(lang, context) {
+  return `You are ELIA, Prime Health's personal health strategist, in a live voice conversation. Speak ${LIVE_LANG[lang] || "English"} only. Warm, plain, one to three short sentences per turn; no lists, no markdown.
+You only help with health: nutrition, movement, sleep, stress, symptoms, medicines, insurance cover for care, and the member's own data, scores and plan. For anything else, say in one friendly sentence that you're their health strategist and offer to help with their health instead.
+Delegate to the client whenever the member asks about their own data, scores, plan, meals, sleep, devices or insurance, asks for specifics about a condition, medicine or treatment, or asks anything you are not sure about. While the delegated answer is on its way, say a short natural filler like "Let me check that for you" and then speak the commentary you receive, in your own words, without adding medical claims of your own. Never diagnose or prescribe; for doses suggest their doctor or pharmacist. If the member describes an emergency (chest pain, trouble breathing, stroke signs, severe bleeding, thoughts of self-harm), tell them to call emergency services right now before anything else.
+Begin by greeting the member briefly and inviting a health question.
+${context ? "Member context: " + context : ""}`;
+}
+async function liveStart(req, res) {
+  if (!OPENAI_KEY && !process.env.LIVE_MOCK) return send(res, 503, { error: "not_configured" });
+  if (!sameOrigin(req)) return send(res, 403, { error: "origin" });
+  if (!allowed(clientIp(req), "live", 20)) return send(res, 429, { error: "rate_limited" });
+  let b = {};
+  try { b = await readJson(req, 64 * 1024); } catch { return send(res, 400, { error: "bad_request" }); }
+  const lang = ["en", "es", "ar"].includes(b.lang) ? b.lang : "en";
+  if (process.env.LIVE_MOCK) return send(res, 200, { id: "live-mock-" + Date.now(), mock: true, model: LIVE_MODEL, voice: LIVE_VOICE });
+  if (typeof b.sdp !== "string" || !/^v=0/m.test(b.sdp)) return send(res, 400, { error: "bad_sdp" });
+  const session = { model: LIVE_MODEL, instructions: liveInstructions(lang, String(b.context || "").slice(0, 2000)), delegation: { type: "client" }, audio: { output: { voice: LIVE_VOICE } } };
+  try {
+    const r = await fetch(OPENAI_LIVE_URL, { method: "POST", headers: { Authorization: `Bearer ${OPENAI_KEY}`, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ session, transport: { type: "webrtc", sdp: b.sdp } }) });
+    const ct = r.headers.get("content-type") || "", text = await r.text();
+    let j = {}; if (ct.includes("json")) { try { j = JSON.parse(text); } catch {} }
+    const answer = (j.transport && j.transport.sdp) || j.sdp || (j.answer && (j.answer.sdp || j.answer)) || (/^v=0/m.test(text) ? text : null);
+    if (!r.ok || !answer) { console.error("GPT-Live session failed", r.status, (j.error && (j.error.message || j.error)) || text.slice(0, 300)); return send(res, 502, { error: "upstream", status: r.status }); }
+    return send(res, 200, { id: j.id || (j.session && j.session.id) || null, sdp: answer, model: LIVE_MODEL, voice: LIVE_VOICE });
+  } catch (e) { console.error("GPT-Live error", e.message); return send(res, 502, { error: "upstream" }); }
+}
+
 const server = http.createServer(async (req, res) => {
   const url = req.url || "/";
   if (url === "/healthz") return send(res, 200, { ok: true });
   const u = new URL(url, "http://x"), p = u.pathname;
   if (p === "/api/dfx/config" && req.method === "GET") return send(res, 200, { enabled: ENABLED });
   if (p === "/api/dfx/token" && req.method === "POST") return issueToken(req, res);
-  if (p === "/api/config" && req.method === "GET") return send(res, 200, { dfx: ENABLED, ai: Boolean(AI_KEY), google: Boolean(G_ID && G_SECRET), tts: Boolean(TTS_KEY), tavus: Boolean(TAVUS_KEY) });
+  if (p === "/api/config" && req.method === "GET") return send(res, 200, { dfx: ENABLED, ai: Boolean(AI_KEY), google: Boolean(G_ID && G_SECRET), tts: Boolean(TTS_KEY), tavus: Boolean(TAVUS_KEY), live: Boolean(OPENAI_KEY || process.env.LIVE_MOCK) });
   if (p === "/api/ai" && req.method === "POST") return aiCall(req, res);
   if (p === "/api/tts" && req.method === "POST") return ttsCall(req, res);
+  if (p === "/api/live/start" && req.method === "POST") return liveStart(req, res);
   if (p === "/api/tavus/start" && req.method === "POST") return tavusStart(req, res);
   if (p === "/api/tavus/end" && req.method === "POST") return tavusEnd(req, res);
   if (p === "/api/tavus/llm/chat/completions" && req.method === "POST") return tavusLlm(req, res);

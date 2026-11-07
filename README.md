@@ -82,6 +82,16 @@ conversation when voice mode closes (15-minute cap, 15 starts per IP per hour). 
 the page keeps its own speech recognition and Tavus only animates the replies. Without the key, voice mode uses Cartesia and the orb.
 The page is served with `Cross-Origin-Embedder-Policy: credentialless` so it stays cross-origin isolated (NuraLogix SDK) while loading the Daily call library.
 
+## Voice-only mode with OpenAI GPT-Live
+Set `OPENAI_API_KEY` (a project key with GPT-Live access). Voice mode then offers an **Avatar / Voice** switch: Voice runs
+`gpt-live-1` full duplex over WebRTC (`POST /api/live/start` exchanges the browser's SDP offer for the session answer; the key never
+reaches the page). The session uses client delegation: whenever the model hands a question to the client, the page answers it
+through ELIA's own path (Claude with the member's scores, meals, sleep, devices and insurance) and returns the text as
+`session.commentary.append`, so answers stay grounded; member data is also injected quietly with `session.thinking.append`.
+Emergencies spoken by the member trigger ELIA's safety line first. GPT-Live generates its own speech, so this mode shows the orb,
+not the Tavus face. Optional: `OPENAI_LIVE_VOICE` (default `marin`), `OPENAI_LIVE_MODEL`. Billing is per second of session
+(about $0.05 a minute) plus Claude tokens; 20 starts per IP per hour. `LIVE_MOCK=1` fakes a session for tests.
+
 ## Movement (ELIA Movement engine v174)
 The movement step runs Prime's own engine package (`elia-movement-engine.zip`, bundled unchanged into the page as `EliaMovement`):
 safety first (four questions or the face scan), a starter plan at once, one-tap gates (fitness, time, motivation, place), week 1

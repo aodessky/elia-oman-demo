@@ -23,6 +23,9 @@ await build({
   legalComments: "none",
 });
 
+// OpenAI GPT-Live voice (no dependencies)
+await build({ entryPoints: [path.join(root, "client/live.js")], bundle: true, format: "esm", target: "es2022", minify: true, outfile: path.join(root, "public/live.js"), logLevel: "warning", legalComments: "none" });
+
 await build({
   entryPoints: [path.join(root, "client/dfx-scan.js")],
   bundle: true,
@@ -33,4 +36,4 @@ await build({
   logLevel: "warning",
   legalComments: "none",
 });
-console.log("built public/dfx-scan.js, public/tavus.js and public/dfx-assets/");
+console.log("built public/dfx-scan.js, public/tavus.js, public/live.js and public/dfx-assets/");
