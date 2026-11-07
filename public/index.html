@@ -641,7 +641,7 @@ li.wc-scope{cursor:default}
 .avatar img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
 
 /* Voice mode: Tavus talking avatar in place of the orb */
-.vm-av{display:none;position:relative;width:min(62vw,230px);aspect-ratio:3/4;border:0;padding:0;border-radius:28px;overflow:hidden;background:#05101c;cursor:pointer;box-shadow:0 18px 50px -12px rgba(0,0,0,.6),0 0 0 2px rgba(255,255,255,.12);transition:box-shadow .3s}
+.vm-av{display:none;position:relative;width:min(62vw,230px);height:min(82.7vw,307px);flex:none;aspect-ratio:3/4;border:0;padding:0;border-radius:28px;overflow:hidden;background:#05101c;cursor:pointer;box-shadow:0 18px 50px -12px rgba(0,0,0,.6),0 0 0 2px rgba(255,255,255,.12);transition:box-shadow .3s}
 .vm-av video{width:100%;height:100%;object-fit:cover;display:block}
 .vm.tv-on .vm-orb{display:none}.vm.tv-on .vm-av{display:block}
 .vm.tv-on[data-state="listening"] .vm-av{box-shadow:0 18px 50px -12px rgba(0,0,0,.6),0 0 0 3px var(--teal-bright)}
@@ -745,6 +745,8 @@ li.wc-scope{cursor:default}
 @keyframes vmThink{0%,100%{scale:.94;opacity:.85}50%{scale:1;opacity:1}}
 @media (prefers-reduced-motion:reduce){.vm .vm-core,.vm .vm-glow{animation:none!important;transition:none}}
 .vm-cap{min-height:96px;display:flex;flex-direction:column;gap:8px;text-align:center}
+.vm.tv-on .vm-cap,.vm.tv-on .vm-chips{display:none}
+.vm.tv-on .vm-mid{flex:1;min-height:0;display:grid;place-items:center;align-content:center}
 .vm-bot p{margin:2px 0 0;font:500 16px/1.4 var(--f-body);max-height:6.9em;overflow:auto}
 .vm-who{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#7fe6d9}
 .vm-bot[data-who="sim"] .vm-who{color:#b3b7ff}
@@ -2412,18 +2414,28 @@ function vmTavusStart(){const T=window.EliaTavus;if(!T||VM.tv||VM.ttsOnly)return
       onAudio:tr=>{const a=v.querySelector(".vm-aud");a.srcObject=new MediaStream([tr]);a.play().catch(()=>{})},
       onStarted:()=>{VM.tvTalking=true;v.classList.add("talking");if(VM.duplex)vmState("speaking")},
       onStopped:()=>{VM.tvTalking=false;v.classList.remove("talking");if(VM.duplex){vmState(VM.muted?"muted":"listening");return}setTimeout(()=>{if(!VM.tvTalking&&VM.speaking&&VM.tvItem)vmSpoken()},450)},
-      onGone:()=>fail("left"),onError:e=>fail(e)},{greeting:t("vm_hello"),lang:S.lang,context:ctx}).catch(e=>fail(e&&e.message))})}
+      onGone:()=>fail("left"),onError:e=>fail(e)},{greeting:t("vm_hello_qa"),lang:S.lang,context:ctx}).catch(e=>fail(e&&e.message))})}
 /* One duplex turn: collect every ELIA message produced by this input (buttons pressed by meaning, Claude answers, cards) as one spoken reply */
 async function vmDuplexTurn(text){if(!VM.on||!text)return"";
   /* her own voice coming back through the speakers: a fragment that arrives while she is still talking, with no interruption (Tavus stops her first when the member cuts in) */
   const words=text.trim().split(/\s+/).length;if(VM.tvTalking&&words<=4)return"";if(/—$|^[^\p{L}\p{N}]*$/u.test(text.trim())&&words<=3)return"";
   vmCap(null,text);
   if(/^(?:stop|end voice( mode)?|exit voice mode|goodbye|termina(r)?( modo de voz)?|adios|أنهِ|انهاء|إنهاء)$/i.test(vmNorm(text))){setTimeout(vmClose,800);return t("vm_bye")}
-  const parts=[];VM.collect=parts;const b=S.await?strictMatch(text):vmMatchReply(text);
-  if(b){vmCap(null,b.textContent);b.click()}else{const el=user(esc(text));await smartRoute(text,el)}
-  /* wait for the chain of messages this input produced (pacing is skipped in voice mode) */
-  const t0=performance.now();await chain;while(performance.now()-t0<9000&&document.querySelector("#msgs .msg.typing"))await new Promise(r=>setTimeout(r,120));await chain;
-  VM.collect=null;const said=parts.join(" ").replace(/\s+/g," ").trim();if(said)vmCap(said,null,"elia");return said}
+  /* Voice is a health Q&A with ELIA: it never runs the onboarding or scoring flow. Emergencies get the safety line first. */
+  if(SAFE_RE.test(text)||(typeof simEmergency==="function"&&simEmergency(text)))return t("vm_emerg_line",{num:t("emerg_val")});
+  return voiceAnswer(text)}
+/* A spoken answer: short, conversational, from the member's data when it applies, otherwise Claude's general guidance. Keeps a short memory of the call. */
+async function voiceAnswer(q){VM.hist=VM.hist||[];const s=sampleOff?null:await getSample();if(!s)return t("vm_noai");
+  try{const turns=VM.hist.slice(-8);const r=await s([...turns,{role:"user",content:`You are ELIA, Prime Health's personal health strategist, in a live voice conversation. Reply as natural speech: warm, plain, one to three short sentences (never a list, no markdown, no emoji). Answer in ${LANG_NAME[S.lang]}.
+Only health, wellness, nutrition, movement, sleep, stress, symptoms, medicines, and the member's own data and plan. For anything else, say in one friendly sentence that you're their health strategist and offer to help with their health instead.
+Use the member's data below when it applies and say so briefly. Don't diagnose or prescribe; for medicines or doses, suggest their doctor or pharmacist; if it sounds like an emergency, tell them to call emergency services now.
+You may end with one short follow-up question when it helps.
+Member's data:
+${memberContext()||"(nothing collected yet)"}
+The member said: """${q}"""`}],{modelTier:"default",cache:false});
+    const a=(r&&r.text||"").replace(/\*\*/g,"").replace(/\s+/g," ").trim();if(!a)return t("vm_noai");
+    VM.hist.push({role:"user",content:q},{role:"assistant",content:a});return a}
+  catch(e){return t("vm_noai")}}
 function vmTavusStop(){if(!VM.tv)return;VM.tv=null;VM.duplex=false;clearTimeout(VM.tvTo);clearTimeout(VM.tvGuard);VM.tvItem=null;try{window.EliaTavus&&EliaTavus.stop()}catch(e){}
   const v=document.getElementById("vm");if(v){v.classList.remove("tv","tv-on","talking");const el=v.querySelector(".vm-av video");if(el)el.srcObject=null;const a=v.querySelector(".vm-aud");if(a)a.srcObject=null}}
 /* ---- open / close ---- */
@@ -2515,11 +2527,11 @@ function vmHeard(text){vmCap(null,text);if(/^(?:stop|end voice( mode)?|exit voic
   vmState("thinking");const b=S.await?strictMatch(text):vmMatchReply(text);
   if(b){b.click()}else{const i=$("#inp");i.value=text;$("#composer").requestSubmit()}
   vmMaybeListen(1500)}
-Object.assign(L.en,{vm_title:"Voice",vm_connect:"Connecting to ELIA…",vm_bye:"Okay, talk soon.",vm_listen_dx:"Listening · just talk, you can interrupt me",vm_listen:"Listening…",vm_think:"Thinking…",vm_speak:"Speaking · tap to interrupt",vm_paused:"Paused · tap the orb to talk",vm_muted:"Mic off",vm_say:"You can say",vm_hello:"I'm listening. Go ahead.",vm_end:"End",vm_mute:"Mute",vm_unmute:"Unmute",
+Object.assign(L.en,{vm_title:"Voice",vm_connect:"Connecting to ELIA…",vm_bye:"Okay, talk soon.",vm_hello_qa:"Hi, I'm ELIA. Ask me anything about your health.",vm_noai:"I couldn't reach my answers just now. Could you ask that again in a moment?",vm_emerg_line:"That could be an emergency. Please call {num} right now. I'm here, but a person needs to help you.",vm_listen_dx:"Listening · just talk, you can interrupt me",vm_listen:"Listening…",vm_think:"Thinking…",vm_speak:"Speaking · tap to interrupt",vm_paused:"Paused · tap the orb to talk",vm_muted:"Mic off",vm_say:"You can say",vm_hello:"I'm listening. Go ahead.",vm_end:"End",vm_mute:"Mute",vm_unmute:"Unmute",
  vm_nomic_t:"Voice input isn't available here",vm_nomic_d:"This view doesn't allow the microphone. I can still read my replies aloud while you type, or use the standalone version for full voice conversation.",vm_tts:"Read replies aloud",vm_close:"Close",vm_tts_on:"Okay, I'll read my replies aloud.",vm_pill:"Spoken replies on",vm_off:"Turn off",vm_emerg:"This may be an emergency",vm_btn:"Voice mode"});
-Object.assign(L.es,{vm_title:"Voz",vm_connect:"Conectando con ELIA…",vm_bye:"Listo, hablamos pronto.",vm_listen_dx:"Escuchando · solo habla, puedes interrumpirme",vm_listen:"Escuchando…",vm_think:"Pensando…",vm_speak:"Hablando · toca para interrumpir",vm_paused:"En pausa · toca el círculo para hablar",vm_muted:"Micrófono apagado",vm_say:"Puedes decir",vm_hello:"Te escucho. Adelante.",vm_end:"Terminar",vm_mute:"Silenciar",vm_unmute:"Activar mic",
+Object.assign(L.es,{vm_title:"Voz",vm_connect:"Conectando con ELIA…",vm_bye:"Listo, hablamos pronto.",vm_hello_qa:"Hola, soy ELIA. Pregúntame lo que quieras sobre tu salud.",vm_noai:"No pude conectar con mis respuestas en este momento. ¿Me lo preguntas de nuevo en un momento?",vm_emerg_line:"Eso podría ser una emergencia. Por favor llama al {num} ahora mismo. Aquí estoy, pero una persona debe ayudarte.",vm_listen_dx:"Escuchando · solo habla, puedes interrumpirme",vm_listen:"Escuchando…",vm_think:"Pensando…",vm_speak:"Hablando · toca para interrumpir",vm_paused:"En pausa · toca el círculo para hablar",vm_muted:"Micrófono apagado",vm_say:"Puedes decir",vm_hello:"Te escucho. Adelante.",vm_end:"Terminar",vm_mute:"Silenciar",vm_unmute:"Activar mic",
  vm_nomic_t:"La entrada de voz no está disponible aquí",vm_nomic_d:"Esta vista no permite el micrófono. Aun así puedo leer mis respuestas en voz alta mientras escribes, o usa la versión independiente para conversar por voz.",vm_tts:"Leer respuestas en voz alta",vm_close:"Cerrar",vm_tts_on:"Va, leeré mis respuestas en voz alta.",vm_pill:"Respuestas habladas activadas",vm_off:"Desactivar",vm_emerg:"Esto podría ser una emergencia",vm_btn:"Modo de voz"});
-Object.assign(L.ar,{vm_title:"الصوت",vm_connect:"جارٍ الاتصال بـ ELIA…",vm_bye:"حسنًا، نتحدث قريبًا.",vm_listen_dx:"أستمع · تحدث فقط، ويمكنك مقاطعتي",vm_listen:"أستمع…",vm_think:"أفكر…",vm_speak:"أتحدث · اضغط للمقاطعة",vm_paused:"متوقف · اضغط الدائرة للتحدث",vm_muted:"الميكروفون مغلق",vm_say:"يمكنك أن تقول",vm_hello:"أنا أستمع. تفضل.",vm_end:"إنهاء",vm_mute:"كتم",vm_unmute:"تشغيل الميكروفون",
+Object.assign(L.ar,{vm_title:"الصوت",vm_connect:"جارٍ الاتصال بـ ELIA…",vm_bye:"حسنًا، نتحدث قريبًا.",vm_hello_qa:"مرحبًا، أنا ELIA. اسألني أي شيء عن صحتك.",vm_noai:"لم أتمكن من الوصول إلى إجاباتي الآن. هل تعيد السؤال بعد قليل؟",vm_emerg_line:"قد تكون هذه حالة طارئة. من فضلك اتصل بـ {num} الآن. أنا هنا، لكن يجب أن يساعدك شخص.",vm_listen_dx:"أستمع · تحدث فقط، ويمكنك مقاطعتي",vm_listen:"أستمع…",vm_think:"أفكر…",vm_speak:"أتحدث · اضغط للمقاطعة",vm_paused:"متوقف · اضغط الدائرة للتحدث",vm_muted:"الميكروفون مغلق",vm_say:"يمكنك أن تقول",vm_hello:"أنا أستمع. تفضل.",vm_end:"إنهاء",vm_mute:"كتم",vm_unmute:"تشغيل الميكروفون",
  vm_nomic_t:"الإدخال الصوتي غير متاح هنا",vm_nomic_d:"لا تسمح هذه الواجهة بالميكروفون. لا يزال بإمكاني قراءة ردودي بصوت عالٍ أثناء الكتابة، أو استخدم النسخة المستقلة للمحادثة الصوتية الكاملة.",vm_tts:"اقرأ الردود بصوت عالٍ",vm_close:"إغلاق",vm_tts_on:"حسنًا، سأقرأ ردودي بصوت عالٍ.",vm_pill:"الردود المنطوقة مفعّلة",vm_off:"إيقاف",vm_emerg:"قد تكون هذه حالة طارئة",vm_btn:"الوضع الصوتي"});
 
 document.getElementById("btnVM").onclick=()=>vmOpen();
