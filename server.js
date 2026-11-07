@@ -324,7 +324,7 @@ async function tavusStart(req, res) {
     const r = await fetch(`${TAVUS_API}/conversations`, { method: "POST", headers: tavusHeaders(), body: JSON.stringify({
       face_id: tavusFace, pal_id: tavusPal, conversation_name: "ELIA voice mode",
       ...(tavusPalMode === "full" || tavusPalMode === "duplex" ? { custom_greeting: String(b.greeting || "").slice(0, 300) || "I'm listening. Go ahead.", conversational_context: `elia_conversation:${convKey} ` + String(b.context || "").slice(0, 2000) } : {}),
-      properties: { max_call_duration: 900, participant_left_timeout: 5, participant_absent_timeout: 60, languages: [b.lang === "es" ? "spanish" : b.lang === "ar" ? "arabic" : "english"] } }) });
+      properties: { max_call_duration: 900, participant_left_timeout: 5, participant_absent_timeout: 60, languages: [["en", "es", "ar"].includes(b.lang) ? b.lang : "en"] } }) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.conversation_url) { console.error("Tavus conversation failed", r.status, j.message || j.error || ""); return send(res, 502, { error: "upstream", status: r.status }); }
     const rec = { turns: [], waiter: null, replies: new Map(), at: Date.now(), key: convKey };
@@ -342,7 +342,9 @@ async function tavusLlm(req, res) {
   // Which conversation? Tavus sends the id in a request header (name undocumented), so look for a known id in any header,
   // then in the system context (we put "elia_conversation:<id>" there), then fall back to the only live conversation.
   let convId = null;
-  for (const v of Object.values(req.headers)) { const str = String(v); for (const id of tavusConvs.keys()) if (str.includes(id)) { convId = id; break; } if (convId) break; }
+  const hdr = req.headers["conversation-id"] || req.headers["conversation_id"] || req.headers["x-conversation-id"];
+  if (hdr && tavusConvs.has(String(hdr))) convId = String(hdr);
+  if (!convId) for (const v of Object.values(req.headers)) { const str = String(v); for (const id of tavusConvs.keys()) if (str.includes(id)) { convId = id; break; } if (convId) break; }
   if (!convId) { const sys = msgs.filter((m) => m.role === "system").map((m) => (typeof m.content === "string" ? m.content : "")).join("\n"); const m = sys.match(/elia_conversation:(k[a-f0-9]{16})/); if (m && tavusKeys.has(m[1])) convId = tavusKeys.get(m[1]); }
   if (!convId && tavusConvs.size === 1) convId = [...tavusConvs.keys()][0];
   const c = convId && tavusConvs.get(convId);
