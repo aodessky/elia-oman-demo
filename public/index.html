@@ -2414,7 +2414,10 @@ function vmTavusStart(){const T=window.EliaTavus;if(!T||VM.tv||VM.ttsOnly)return
       onStopped:()=>{VM.tvTalking=false;v.classList.remove("talking");if(VM.duplex){vmState(VM.muted?"muted":"listening");return}setTimeout(()=>{if(!VM.tvTalking&&VM.speaking&&VM.tvItem)vmSpoken()},450)},
       onGone:()=>fail("left"),onError:e=>fail(e)},{greeting:t("vm_hello"),lang:S.lang,context:ctx}).catch(e=>fail(e&&e.message))})}
 /* One duplex turn: collect every ELIA message produced by this input (buttons pressed by meaning, Claude answers, cards) as one spoken reply */
-async function vmDuplexTurn(text){if(!VM.on||!text)return"";vmCap(null,text);
+async function vmDuplexTurn(text){if(!VM.on||!text)return"";
+  /* her own voice coming back through the speakers: a fragment that arrives while she is still talking, with no interruption (Tavus stops her first when the member cuts in) */
+  const words=text.trim().split(/\s+/).length;if(VM.tvTalking&&words<=4)return"";if(/—$|^[^\p{L}\p{N}]*$/u.test(text.trim())&&words<=3)return"";
+  vmCap(null,text);
   if(/^(?:stop|end voice( mode)?|exit voice mode|goodbye|termina(r)?( modo de voz)?|adios|أنهِ|انهاء|إنهاء)$/i.test(vmNorm(text))){setTimeout(vmClose,800);return t("vm_bye")}
   const parts=[];VM.collect=parts;const b=S.await?strictMatch(text):vmMatchReply(text);
   if(b){vmCap(null,b.textContent);b.click()}else{const el=user(esc(text));await smartRoute(text,el)}
