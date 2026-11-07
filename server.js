@@ -399,7 +399,8 @@ async function tavusEnd(req, res) {
 /* ---------- OpenAI GPT-Live: full-duplex voice (voice-only mode, no avatar) ----------
    The browser creates a WebRTC offer; this server holds the OpenAI key, creates the Live session with client delegation and returns the
    SDP answer. Health answers stay grounded: the page runs its own Claude path when the model delegates and hands the text back as commentary. */
-const OPENAI_KEY = (process.env.OPENAI_API_KEY || "").trim();
+const OPENAI_KEY = (process.env.OPENAI_API_KEY || "").trim().replace(/^["']|["']$/g, "").replace(/^Bearer\s+/i, "").trim();
+if (OPENAI_KEY) console.log(`GPT-Live: OpenAI key present (${OPENAI_KEY.slice(0, 7)}…, ${OPENAI_KEY.length} chars${/\s/.test(OPENAI_KEY) ? ", contains whitespace!" : ""})`);
 const OPENAI_LIVE_URL = process.env.OPENAI_LIVE_URL || "https://api.openai.com/v1/live/sessions";
 const LIVE_MODEL = process.env.OPENAI_LIVE_MODEL || "gpt-live-1";
 const LIVE_VOICE = process.env.OPENAI_LIVE_VOICE || "marin";
@@ -422,11 +423,19 @@ async function liveStart(req, res) {
   if (typeof b.sdp !== "string" || !/^v=0/m.test(b.sdp)) return send(res, 400, { error: "bad_sdp" });
   const session = { model: LIVE_MODEL, instructions: liveInstructions(lang, String(b.context || "").slice(0, 2000)), delegation: { type: "client" }, audio: { output: { voice: LIVE_VOICE } } };
   try {
-    const r = await fetch(OPENAI_LIVE_URL, { method: "POST", headers: { Authorization: `Bearer ${OPENAI_KEY}`, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ session, transport: { type: "webrtc", sdp: b.sdp } }) });
+    const headers = { Authorization: `Bearer ${OPENAI_KEY}`, "Content-Type": "application/json", Accept: "application/json" };
+    const payload = JSON.stringify({ session, transport: { type: "webrtc", sdp: b.sdp } });
+    // follow redirects by hand so the Authorization header survives a cross-host hop
+    let url = OPENAI_LIVE_URL, r = null;
+    for (let hop = 0; hop < 3; hop++) {
+      r = await fetch(url, { method: "POST", headers, body: payload, redirect: "manual" });
+      if (r.status >= 300 && r.status < 400 && r.headers.get("location")) { url = new URL(r.headers.get("location"), url).toString(); console.log("GPT-Live redirect →", url); continue; }
+      break;
+    }
     const ct = r.headers.get("content-type") || "", text = await r.text();
     let j = {}; if (ct.includes("json")) { try { j = JSON.parse(text); } catch {} }
     const answer = (j.transport && j.transport.sdp) || j.sdp || (j.answer && (j.answer.sdp || j.answer)) || (/^v=0/m.test(text) ? text : null);
-    if (!r.ok || !answer) { console.error("GPT-Live session failed", r.status, (j.error && (j.error.message || j.error)) || text.slice(0, 300)); return send(res, 502, { error: "upstream", status: r.status }); }
+    if (!r.ok || !answer) { console.error("GPT-Live session failed", r.status, (j.error && (j.error.message || j.error)) || text.slice(0, 300), `| key ${OPENAI_KEY.slice(0, 7)}… ${OPENAI_KEY.length} chars | ${url}`); return send(res, 502, { error: "upstream", status: r.status, detail: (j.error && j.error.message) || null }); }
     return send(res, 200, { id: j.id || (j.session && j.session.id) || null, sdp: answer, model: LIVE_MODEL, voice: LIVE_VOICE });
   } catch (e) { console.error("GPT-Live error", e.message); return send(res, 502, { error: "upstream" }); }
 }
