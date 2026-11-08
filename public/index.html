@@ -231,6 +231,7 @@ h2,h3,h4,.big b,.brand b{font-family:var(--f-display)}
 .mq-items{display:flex;flex-wrap:wrap;gap:5px;margin:2px 0 0;padding:0;list-style:none}
 .mq-items li{font-size:12px;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:2px 9px}
 .mq-items li span{color:var(--muted)}
+.mp-tiles{display:flex;gap:14px;flex-wrap:wrap;margin:2px 0 2px}.mp-tiles span{flex:1 1 90px;min-width:0}.mp-tiles b{display:block;font:600 17px/1.1 var(--f-display);color:var(--brand)}.mp-tiles small{display:block;font-size:11px;color:var(--muted);margin-top:2px}
 .ins-rows{display:flex;flex-direction:column;gap:8px}
 .aic-new{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(90deg,#7c3aed,#06b6d4);color:#fff;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border-radius:999px;padding:3px 9px;align-self:flex-start}
 .aic-new::before{content:"";width:6px;height:6px;border-radius:50%;background:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.35);animation:aicPulse 1.6s ease-in-out infinite}
@@ -823,6 +824,7 @@ li.wc-scope{cursor:default}
     <button id="pSafety" data-t="p_safety">Test safety routing</button>
     <button id="pRec" data-t="p_rec">Connect health records</button>
     <button id="pTri" data-t="p_tri">Check a symptom</button>
+    <button id="pMealPlan" data-t="p_mealplan">Build a meal plan</button>
     <button id="pSleep" data-t="p_sleep">Start a sleep goal</button>
     <button id="pMove" data-t="p_move">Start a movement goal</button>
     <button id="pDiet" data-t="p_diet">Start a diet goal</button>
@@ -3233,6 +3235,510 @@ Object.assign(L.ar,{hq_ins:"تأميني",file_ins:"وثيقة التأمين",p
  ins_added_upd:"أُضيفت وثيقة التأمين",ins_none:"لا يوجد تأمين صحي",f_ins:"التأمين الصحي",
  ins_sub:"وثيقتك وما تغطيه وكم ستكلفك الزيارة.",ins_empty_short:"لم تُضف وثيقة بعد.",ins_add_btn:"أضف وثيقتي",ins_add_title:"أضف تأمينك الصحي",ins_add_body:"شارك شركة التأمين ورقم الوثيقة في الدردشة وستعرض ELIA التغطية والمساهمات كلما أوصى سيم برعاية.",ins_active:"سارية",ins_period:"الفترة",ins_territory:"النطاق الجغرافي",ins_helpline:"خط ليفا",ins_benefits_h:"جدول المنافع",ins_last_check:"آخر فحص للتغطية",ins_preauth_h:"يتطلب موافقة مسبقة",ins_preauth_note:"صالحة 14 يومًا من الإصدار. الطوارئ معفاة لكن يجب الإبلاغ خلال 48 ساعة.",ins_excl_h:"أهم الاستثناءات",ins_remove:"إزالة هذه الوثيقة",ins_done:"هذا كل شيء، شكرًا",ins_aic_line:"زيارة أخصائي لهذا مجانية مع AI Cover ({n} متبقية هذا العام) دون إحالة."});
 
+/* ============ Long-term meal plan ============ */
+/* ============ Long-term meal plan: a small dependency-free PDF writer ============
+   Base-14 fonts only (Helvetica + Times), WinAnsi text, vector panels and illustrations.
+   Text widths are measured with a canvas using the matching system faces, which tracks the
+   base-14 metrics closely enough for wrapping. */
+const PDF_W=595.28,PDF_H=841.89,PDF_M=56,PDF_CW=PDF_W-PDF_M*2;
+const C_BG=[0.988,0.976,0.957],C_GREEN=[0.106,0.263,0.196],C_RUST=[0.710,0.329,0.169],C_BODY=[0.180,0.227,0.200],
+      C_MUTE=[0.420,0.478,0.447],C_LINE=[0.902,0.878,0.839],C_WHITE=[1,1,1],C_SAGE=[0.918,0.945,0.918],
+      C_SAGEBAR=[0.290,0.486,0.349],C_PEACH=[0.984,0.933,0.890],C_DOT=[0.839,0.882,0.831];
+const _mctx=(()=>{try{return document.createElement("canvas").getContext("2d")}catch(e){return null}})();
+const PDF_FONTS={F1:["Helvetica","400 ","Helvetica,Arial,sans-serif"],F2:["Helvetica-Bold","700 ","Helvetica,Arial,sans-serif"],
+  F3:["Times-Roman","400 ","'Times New Roman',Times,serif"],F4:["Times-Bold","700 ","'Times New Roman',Times,serif"]};
+/* WinAnsi: Latin-1 passes through; a few typographic characters are remapped; anything else is folded */
+const WINANSI={0x2018:0x91,0x2019:0x92,0x201C:0x93,0x201D:0x94,0x2013:0x96,0x2014:0x97,0x2022:0x95,0x2026:0x85,0x2122:0x99,0x20AC:0x80,0x00A0:0x20};
+function pdfStr(s){let o="";for(const ch of String(s==null?"":s)){let c=ch.codePointAt(0);if(WINANSI[c]!=null)c=WINANSI[c];
+  if(c>255){const f=ch.normalize("NFD").replace(/[̀-ͯ]/g,"");c=(f&&f.codePointAt(0)<256)?f.codePointAt(0):63}
+  const b=String.fromCharCode(c);o+=(b==="("||b===")"||b==="\\")?"\\"+b:b}return o}
+function pdfW(text,fk,size){if(!_mctx)return String(text).length*size*0.5;const f=PDF_FONTS[fk];_mctx.font=f[1]+size+"px "+f[2];return _mctx.measureText(String(text)).width}
+function pdfWrap(text,fk,size,max){const words=String(text).split(/\s+/).filter(Boolean),lines=[];let cur="";
+  for(const w of words){const t=cur?cur+" "+w:w;if(pdfW(t,fk,size)<=max||!cur)cur=t;else{lines.push(cur);cur=w}}
+  if(cur)lines.push(cur);return lines.length?lines:[""]}
+function PdfDoc(){
+  const pages=[];let cur=null,y=0;
+  const o=(n)=>Math.round(n*100)/100;
+  const api={
+    get y(){return y},set y(v){y=v},get page(){return pages.length},
+    add(){cur={ops:[]};pages.push(cur);api.fill(0,0,PDF_W,PDF_H,C_BG);y=PDF_M+14;return api},
+    raw(s){cur.ops.push(s);return api},
+    col(c,stroke){cur.ops.push(`${o(c[0])} ${o(c[1])} ${o(c[2])} ${stroke?"RG":"rg"}`);return api},
+    fill(x,yy,w,h,c){api.col(c);cur.ops.push(`${o(x)} ${o(PDF_H-yy-h)} ${o(w)} ${o(h)} re f`);return api},
+    rect(x,yy,w,h,c,lw){api.col(c,true);cur.ops.push(`${o(lw||0.7)} w ${o(x)} ${o(PDF_H-yy-h)} ${o(w)} ${o(h)} re S`);return api},
+    line(x1,y1,x2,y2,c,lw){api.col(c,true);cur.ops.push(`${o(lw||0.7)} w ${o(x1)} ${o(PDF_H-y1)} m ${o(x2)} ${o(PDF_H-y2)} l S`);return api},
+    circle(cx,cy,r,c,stroke){const k=0.5523*r,Y=PDF_H-cy;api.col(c,!!stroke);
+      cur.ops.push(`${o(cx-r)} ${o(Y)} m ${o(cx-r)} ${o(Y+k)} ${o(cx-k)} ${o(Y+r)} ${o(cx)} ${o(Y+r)} c ${o(cx+k)} ${o(Y+r)} ${o(cx+r)} ${o(Y+k)} ${o(cx+r)} ${o(Y)} c ${o(cx+r)} ${o(Y-k)} ${o(cx+k)} ${o(Y-r)} ${o(cx)} ${o(Y-r)} c ${o(cx-k)} ${o(Y-r)} ${o(cx-r)} ${o(Y-k)} ${o(cx-r)} ${o(Y)} c ${stroke?`${o(0.8)} w S`:"f"}`);return api},
+    text(s,x,yy,fk,size,c,extra){const t=pdfStr(s);if(!t)return api;api.col(c||C_BODY);
+      cur.ops.push(`BT /${fk} ${size} Tf${extra&&extra.ls?` ${extra.ls} Tc`:""} ${o(x)} ${o(PDF_H-yy)} Td (${t}) Tj ET${extra&&extra.ls?" 0 Tc":""}`);return api},
+    textC(s,cx,yy,fk,size,c){return api.text(s,cx-pdfW(s,fk,size)/2,yy,fk,size,c)},
+    textR(s,rx,yy,fk,size,c){return api.text(s,rx-pdfW(s,fk,size),yy,fk,size,c)},
+    para(s,x,yy,w,fk,size,c,lh){const L=pdfWrap(s,fk,size,w);L.forEach((ln,i)=>api.text(ln,x,yy+i*(lh||size*1.35),fk,size,c));return yy+(L.length-1)*(lh||size*1.35)},
+    build(){
+      const objs=[];const push=(s)=>{objs.push(s);return objs.length};
+      const fontIds={};Object.keys(PDF_FONTS).forEach(k=>{fontIds[k]=push(`<< /Type /Font /Subtype /Type1 /BaseFont /${PDF_FONTS[k][0]} /Encoding /WinAnsiEncoding >>`)});
+      const kids=[];const pagesId=objs.length+pages.length*2+1;
+      pages.forEach(p=>{const body=p.ops.join("\n");
+        const cid=push(`<< /Length ${body.length} >>\nstream\n${body}\nendstream`);
+        const res=`<< /Font << ${Object.keys(fontIds).map(k=>`/${k} ${fontIds[k]} 0 R`).join(" ")} >> >>`;
+        kids.push(push(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${PDF_W} ${PDF_H}] /Resources ${res} /Contents ${cid} 0 R >>`))});
+      const pid=push(`<< /Type /Pages /Kids [${kids.map(k=>`${k} 0 R`).join(" ")}] /Count ${kids.length} >>`);
+      const cat=push(`<< /Type /Catalog /Pages ${pid} 0 R >>`);
+      let out="%PDF-1.4\n";const offs=[];
+      objs.forEach((s,i)=>{offs.push(out.length);out+=`${i+1} 0 obj\n${s}\nendobj\n`});
+      const xref=out.length;
+      out+=`xref\n0 ${objs.length+1}\n0000000000 65535 f \n`+offs.map(x=>String(x).padStart(10,"0")+" 00000 n \n").join("");
+      out+=`trailer\n<< /Size ${objs.length+1} /Root ${cat} 0 R >>\nstartxref\n${xref}\n%%EOF`;
+      const bytes=new Uint8Array(out.length);for(let i=0;i<out.length;i++)bytes[i]=out.charCodeAt(i)&0xff;
+      return new Blob([bytes],{type:"application/pdf"})}
+  };
+  return api}
+/* ---- shared page furniture ---- */
+function mpEyebrow(d,s){d.text(String(s).toUpperCase(),PDF_M,d.y,"F2",8.5,C_RUST,{ls:1.2});d.y+=34}
+function mpH1(d,s){const L=pdfWrap(s,"F4",30,PDF_CW);L.forEach((ln,i)=>d.text(ln,PDF_M,d.y+i*34,"F4",30,C_GREEN));d.y+=L.length*34+4}
+function mpH2(d,s){const L=pdfWrap(s,"F4",21,PDF_CW);L.forEach((ln,i)=>d.text(ln,PDF_M,d.y+i*25,"F4",21,C_GREEN));d.y+=L.length*25+6}
+function mpBody(d,s,size,col,w,x){const W=w||PDF_CW,X=x==null?PDF_M:x,sz=size||10.5;
+  const L=pdfWrap(s,"F1",sz,W);L.forEach((ln,i)=>d.text(ln,X,d.y+i*(sz*1.42),"F1",sz,col||C_BODY));d.y+=L.length*(sz*1.42);return d.y}
+function mpCallout(d,lead,text,tone){const bg=tone==="green"?C_SAGE:C_PEACH,bar=tone==="green"?C_SAGEBAR:C_RUST;
+  const w=PDF_CW-22,sz=9.8;const lw=lead?pdfW(lead+" ","F2",sz):0;
+  const words=String(text).split(/\s+/);const lines=[];let cur="",first=true;
+  for(const wd of words){const t=cur?cur+" "+wd:wd;const avail=first?w-lw:w;
+    if(pdfW(t,"F1",sz)<=avail||!cur)cur=t;else{lines.push(cur);cur=wd;first=false}}
+  if(cur)lines.push(cur);
+  const h=lines.length*(sz*1.45)+22;
+  d.fill(PDF_M,d.y,PDF_CW,h,bg);d.fill(PDF_M,d.y,3.5,h,bar);
+  let ty=d.y+15;
+  lines.forEach((ln,i)=>{if(i===0&&lead){d.text(lead,PDF_M+14,ty,"F2",sz,C_BODY);d.text(ln,PDF_M+14+lw,ty,"F1",sz,C_BODY)}
+    else d.text(ln,PDF_M+14,ty,"F1",sz,C_BODY);ty+=sz*1.45});
+  d.y+=h+16}
+function mpStats(d,items){const gap=16,w=(PDF_CW-gap*(items.length-1))/items.length;
+  items.forEach((it,i)=>{const x=PDF_M+i*(w+gap);d.text(it.big,x,d.y+20,"F4",22,C_RUST);
+    const L=pdfWrap(it.label,"F1",8.6,w);L.forEach((ln,j)=>d.text(ln,x,d.y+38+j*11.5,"F1",8.6,C_MUTE))});
+  d.y+=66}
+function mpCards(d,items,cols){const n=cols||2,gap=14,w=(PDF_CW-gap*(n-1))/n;let maxH=0;
+  items.forEach(it=>{const tl=pdfWrap(it.title,"F2",10.5,w-26),bl=pdfWrap(it.body,"F1",9.4,w-26);
+    const h=(it.n?20:0)+tl.length*13+bl.length*13.3+26;if(h>maxH)maxH=h});
+  const rows=Math.ceil(items.length/n);
+  items.forEach((it,i)=>{const c=i%n,r=Math.floor(i/n);const x=PDF_M+c*(w+gap),yy=d.y+r*(maxH+gap);
+    d.fill(x,yy,w,maxH,C_WHITE);d.rect(x,yy,w,maxH,C_LINE);
+    let ty=yy+(it.n?22:20);
+    if(it.n){d.text(it.n,x+13,ty,"F4",15,C_RUST);ty+=18}
+    pdfWrap(it.title,"F2",10.5,w-26).forEach(ln=>{d.text(ln,x+13,ty,"F2",10.5,C_RUST);ty+=13});
+    ty+=3;
+    pdfWrap(it.body,"F1",9.4,w-26).forEach(ln=>{d.text(ln,x+13,ty,"F1",9.4,C_BODY);ty+=13.3})});
+  d.y+=rows*(maxH+gap)}
+function mpFooter(d,left,n){d.line(PDF_M,PDF_H-62,PDF_W-PDF_M,PDF_H-62,C_LINE,0.6);
+  d.text(left,PDF_M,PDF_H-48,"F1",8.4,C_MUTE);d.textR(String(n),PDF_W-PDF_M,PDF_H-48,"F1",8.4,C_MUTE)}
+/* a drawn stand-in for the photography in a designed plan: three bowls, overhead */
+function mpHero(d,x,y,w,h){
+  d.fill(x,y,w,h,[0.914,0.933,0.910]);
+  const cy=y+h*0.52,R=h*0.30;
+  /* a grain bowl, a fish plate and a berry bowl, seen from above */
+  d.circle(x+w*0.27,cy,R,C_WHITE);d.circle(x+w*0.27,cy,R,[0.792,0.839,0.784],true);
+  d.circle(x+w*0.27,cy,R*0.80,[0.961,0.957,0.925]);
+  for(let i=0;i<9;i++){const a=i/9*Math.PI*2+0.3,rr=R*(0.30+(i%3)*0.14);
+    d.circle(x+w*0.27+Math.cos(a)*rr,cy+Math.sin(a)*rr*0.95,R*(i%2?0.085:0.062),i%3===0?[0.345,0.518,0.306]:i%3===1?[0.886,0.643,0.251]:[0.620,0.706,0.498])}
+  const px=x+w*0.555,py=cy-h*0.06,PR=h*0.255;
+  d.circle(px,py,PR,C_WHITE);d.circle(px,py,PR,[0.792,0.839,0.784],true);
+  for(let i=0;i<9;i++){const t2=i/8;d.circle(px-PR*0.52+t2*PR*1.04,py-PR*0.10-Math.sin(t2*Math.PI)*PR*0.16,PR*0.17,[0.898,0.525,0.325])}
+  d.circle(px-PR*0.30,py+PR*0.42,PR*0.17,[0.345,0.518,0.306]);
+  d.circle(px+PR*0.06,py+PR*0.46,PR*0.15,[0.345,0.518,0.306]);
+  d.circle(px+PR*0.40,py+PR*0.40,PR*0.16,[0.345,0.518,0.306]);
+  const bx=x+w*0.805,by=cy+h*0.12,BR=h*0.195;
+  d.circle(bx,by,BR,C_WHITE);d.circle(bx,by,BR,[0.792,0.839,0.784],true);
+  d.circle(bx,by,BR*0.78,[0.976,0.969,0.945]);
+  for(let i=0;i<7;i++){const a=i/7*Math.PI*2;d.circle(bx+Math.cos(a)*BR*0.38,by+Math.sin(a)*BR*0.38,BR*0.17,i%2?[0.455,0.247,0.408]:[0.631,0.302,0.365])}
+  /* a few herbs and a citrus half scattered on the cloth */
+  d.circle(x+w*0.42,y+h*0.17,h*0.052,[0.937,0.737,0.231]);
+  d.circle(x+w*0.42,y+h*0.17,h*0.030,[0.973,0.859,0.502]);
+  d.circle(x+w*0.12,y+h*0.80,h*0.038,[0.420,0.600,0.329]);
+  d.circle(x+w*0.655,y+h*0.855,h*0.032,[0.420,0.600,0.329]);
+  d.circle(x+w*0.90,y+h*0.20,h*0.034,[0.420,0.600,0.329]);
+}
+/* ============ Long-term meal plan (dietitian-style 7-day plan, delivered as a PDF) ============ */
+/* ---- what the plan is built from ---- */
+function mpInputs(){
+  const f=k=>{const x=S.facts[k];return x&&x.cf!=="cf_declined"?fv(x):null};
+  const w=typeof wearInputs==="function"?wearInputs():{};
+  const L=[];
+  L.push(`Name: ${S.name||"the member"}`);
+  if(f("age"))L.push(`Age: ${f("age")}`);
+  if(f("sex"))L.push(`Biological sex: ${f("sex")}`);
+  if(S.hw)L.push(`Height ${S.hw.h} cm, weight ${S.hw.w} kg (BMI ${(S.hw.w/Math.pow(S.hw.h/100,2)).toFixed(1)})`);
+  if(S.goal)L.push(`Stated goal: ${t("goal_"+S.goal)}`);
+  L.push(`Food allergies / avoids: ${S.allergyText||(S.allergies||[]).join(", ")||"none reported"}`);
+  if(S.meal)L.push(`Most recent logged meal: "${S.meal.text}" — Meal Quality Score ${S.meal.score}/100 (${PN.nt(S.lang,"band_"+S.meal.band)}). Protein balance ${S.meal.prot?"adequate":"low"}; fruit+veg servings ${S.meal.veg}.`);
+  if(S.mealsLogged)L.push(`Meals logged so far: ${S.mealsLogged}`);
+  if(S.ingText)L.push(`What they have at home (from the fridge photo): ${S.ingText}`);
+  if(S.recipe)L.push(`Tonight's planned meal: ${recipeName(S.recipe)} (${S.recipe.serv} servings, ${S.recipe.mins} min)`);
+  if(S.house)L.push(`Cooking for ${S.house} people; typical time available ${S.cook||30} minutes`);
+  if(S.fit!=null)L.push(`Self-rated fitness: ${t("fit"+S.fit)}`);
+  if(S.mv&&S.mv.fit)L.push(`Movement profile: fitness ${S.mv.fit}; time ${S.mv.time}; place ${S.mv.place}`);
+  if(S.plan)L.push(`Current weekly plan: ${S.plan.actions.filter(a=>a.kind!=="checkin").map(actTitle).join("; ")}`);
+  if(w.stepsPerDay)L.push(`Wearable: ${Math.round(w.stepsPerDay)} steps a day`);
+  if(w.activeMinutesWeek)L.push(`Wearable: ${Math.round(w.activeMinutesWeek)} active minutes a week`);
+  if(w.restingHr)L.push(`Wearable resting heart rate: ${w.restingHr} bpm`);
+  if(S.sleepScore)L.push(`Sleep Score ${Math.round(S.sleepScore.score)}/100, pattern ${t("sl_pattern_"+S.sleepScore.pattern).split(".")[0]}`);
+  try{const P=primeNow();if(P.r.display.primeScore!=null)L.push(`Prime Score ${P.r.display.primeScore}/100`);
+    const cats=Object.entries(P.scores).filter(([,v])=>v!=null).map(([k,v])=>`${k} ${Math.round(v)}`).join(", ");
+    if(cats)L.push(`Prime Score categories: ${cats}`)}catch(e){}
+  if(S.scan==="done"&&S.scanRes)L.push(`Face scan: heart rate ${S.scanRes.hr} bpm${S.scanRes.sbp?`, estimated blood pressure ${S.scanRes.sbp}/${S.scanRes.dbp}`:""}`);
+  const v=typeof recVitals==="function"?recVitals():{};
+  if(v.sbp)L.push(`Recorded blood pressure: ${v.sbp}/${v.dbp} mmHg (${v.bpSource||"clinic"})`);
+  if(v.hba1c)L.push(`HbA1c ${v.hba1c}%`);if(v.ldl)L.push(`LDL ${v.ldl} mg/dL`);if(v.fastingGlucose)L.push(`Fasting glucose ${v.fastingGlucose} mg/dL`);
+  let rec="";
+  if(S.record){try{rec=recText(S.record).slice(0,9000)}catch(e){}}
+  return{profile:L.join("\n"),record:rec}}
+/* conditions the fallback plan keys off, read straight from the record */
+function mpFlags(){
+  const txt=((S.record?JSON.stringify(S.record.conditions||[])+JSON.stringify(S.record.meds||[]):"")+" "+(S.allergyText||"")).toLowerCase();
+  const v=typeof recVitals==="function"?recVitals():{};
+  return{htn:/hypertens|high blood pressure/.test(txt)||(v.sbp&&v.sbp>=130),
+    reflux:/reflux|gerd|oesophag|esophag/.test(txt),apnea:/apnoea|apnea/.test(txt),
+    diab:/diabet|prediabet/.test(txt)||(v.hba1c&&v.hba1c>=5.7),lipid:/cholesterol|lipid|statin/.test(txt)||(v.ldl&&v.ldl>=100),
+    weight:/obes|overweight/.test(txt)||S.goal==="weight",
+    allerg:(S.allergies||[]).slice()}}
+/* ---- the dietitian: Claude writes the plan, grounded in everything above ---- */
+async function mpAsk(){const s=sampleOff?null:await getSample();if(!s)return null;
+  const inp=mpInputs();const fl=mpFlags();
+  const schema=`{"title":string,"subtitle":string,"personalized":string,
+"stats":[{"big":string,"label":string}] (exactly 3),
+"priorities":[{"title":string,"body":string}] (exactly 4),
+"clinicalNote":string|null,"dvStats":[{"big":string,"label":string}] (exactly 3),
+"days":[{"day":string,"tag":string,"breakfast":string,"lunch":string,"dinner":string,"snack":string}] (exactly 7),
+"portionGuide":string,
+"swaps":[{"avoid":string,"instead":string,"keep":string}] (4 to 5),
+"eatingOut":string,
+"recipes":[{"name":string,"meta":string,"use":string,"make":string}] (exactly 6),
+"batchNote":string,
+"shopping":{"produce":[string],"proteins":[string],"pantry":[string]},
+"labelNote":string,
+"prep":[{"title":string,"body":string}] (exactly 6),
+"medsNote":string,
+"adjustments":[{"title":string,"body":string}] (exactly 2),
+"sources":[{"title":string,"note":string}] (3 to 5)}`;
+  const j=await s.json(`You are a registered dietitian writing a personalised 7-day eating plan for one member of Prime Health. Write it the way an experienced clinical dietitian would: specific, practical, non-faddish, and anchored to this person's own record.
+
+MEMBER PROFILE
+${inp.profile}
+
+${inp.record?`CONNECTED HEALTH RECORD (use the conditions, medicines and labs that matter for food; ignore the rest)\n${inp.record}`:"No health record is connected; build the plan from the profile above and say so in \"personalized\"."}
+
+RULES
+- Shape the plan around the conditions actually present. Lower sodium and a DASH-style pattern for raised blood pressure; carbohydrate quality and spacing for raised HbA1c or glucose; soluble fibre and unsaturated fats for raised LDL; moderate portions and protein at each meal for weight goals; meal timing and trigger awareness for reflux.
+- Respect every allergy and avoidance absolutely: never place an allergen in a meal, recipe or the shopping list.
+- Use what they already have at home where it fits, and keep cooking within the time they said they have.
+- Reuse ingredients across the week so one shop covers it, and build in leftovers.
+- Never change, start or stop a medicine. If the record lists medicines that interact with food (potassium, warfarin, diuretics), say to confirm with their clinician or pharmacist rather than giving a number.
+- "stats" are three headline facts about the plan itself, for example {"big":"7 days","label":"Breakfast, lunch, dinner and flexible snacks."}.
+- "dvStats" are three nutrition-label reference facts relevant to this person (sodium or added sugar or fibre thresholds).
+- "priorities" are the four things that matter most for this person, each with a short reason drawn from their record.
+- "clinicalNote" summarises the relevant labs and vitals with their dates, or null if none are available.
+- Each day's meals are one line each, concrete, naming foods not nutrients. "tag" is two or three words, like "Fibre first".
+- "recipes": six that cover several meals between them. "meta" like "2 servings · 30 minutes". "use" is the ingredient line, "make" the method in two or three sentences.
+- Write in ${LANG_NAME[S.lang]==="Modern Standard Arabic"?"English (the document is typeset in a Latin font)":LANG_NAME[S.lang]}.
+- Plain language, no markdown, no emoji. Do not invent lab values or conditions that are not above.
+
+Reply with only JSON matching this shape:
+${schema}`,{modelTier:"default"});
+  return j&&j.days&&j.days.length?j:null}
+/* ---- offline fallback: a real plan, assembled from the member's own flags ---- */
+function mpFallback(){
+  const fl=mpFlags(),nm=S.name||"you";const has=a=>fl.allerg.includes(a);
+  const fish=has("fish")||has("shell")?"white beans":"salmon",dairy=has("milk")?"unsweetened soy yogurt":"plain yogurt",
+        grain=has("wheat")?"brown rice":"whole-grain bread",nut=has("nuts")?"pumpkin seeds":"walnuts",egg=has("egg")?"mashed white beans":"an egg";
+  const pri=[];
+  if(fl.htn)pri.push({title:"Blood pressure first",body:"Your record points to raised blood pressure. Build meals from minimally processed foods and compare sodium across breads, sauces, canned foods and restaurant meals."});
+  if(fl.diab)pri.push({title:"Steadier carbohydrates",body:"Pair every carbohydrate with protein, fat or fibre, keep portions of rice, bread and pasta to about a quarter of the plate, and keep sweet drinks out of the week."});
+  if(fl.lipid)pri.push({title:"Fibre and fats that help",body:"Oats, beans, lentils, fruit and vegetables bring soluble fibre. Use olive oil, nuts and seeds in place of butter, cream and processed meat."});
+  if(fl.weight)pri.push({title:"Moderate, satisfying portions",body:"Vegetables, fibre and lean protein at each meal keep fullness up. Snacks are planned rather than automatic. Adjust portions to hunger and your clinician's goals."});
+  if(fl.reflux)pri.push({title:"Reflux-aware timing",body:"Keep dinner moderate and finish at least three hours before lying down. Treat citrus, tomato, garlic, caffeine, chocolate, mint and spicy or high-fat meals as optional, not banned."});
+  const filler=[{title:"Protein at every meal",body:"Spreading protein across the day protects muscle and steadies appetite far better than one large evening portion."},
+    {title:"Plants at every meal",body:"Aim for half the plate vegetables at lunch and dinner, and fruit at breakfast or as a snack. Variety matters more than any single food."},
+    {title:"One shop, one prep block",body:"A single shop and about an hour of preparation makes the rest of the week nearly automatic, which is what keeps a plan alive past day three."},
+    {title:"Cook once, eat twice",body:"Every roast and every pot of grains in this week is sized so a second meal falls out of it. That is what keeps weekday cooking to minutes."}];
+  for(let i=0;pri.length<4&&i<filler.length;i++)pri.push(filler[i]);
+  const C=x=>String(x).charAt(0).toUpperCase()+String(x).slice(1);
+  const D=(day,tag,b,l,dn,sn)=>({day,tag,breakfast:C(b),lunch:C(l),dinner:C(dn),snack:C(sn)});
+  return{
+   title:fl.htn?"Eat for a steadier heart":fl.diab?"Eat for steadier energy":fl.weight?"Eat well, lighter":"A week of eating well",
+   subtitle:`A practical week of ${fl.htn?"lower-sodium, ":""}fibre-rich meals shaped to your own record, your routine and what you already like to cook.`,
+   personalized:`This plan was built from what ${nm} shared with ELIA${S.record?" and from the connected health record":""}: ${[fl.htn&&"raised blood pressure",fl.diab&&"glucose control",fl.lipid&&"cholesterol",fl.weight&&"weight goals",fl.reflux&&"reflux",fl.apnea&&"sleep apnoea"].filter(Boolean).join(", ")||"the goals and habits on file"}, with ${fl.allerg.length?"your stated avoidances applied throughout":"no food allergies reported"}. It does not replace care from your clinician.`,
+   stats:[{big:"7 days",label:"Breakfast, lunch, dinner and flexible snacks."},{big:"1 shop",label:"A consolidated grocery list for the week."},{big:"75 min",label:"A prep block that makes the week easier."}],
+   priorities:pri.slice(0,4),
+   clinicalNote:(()=>{const v=typeof recVitals==="function"?recVitals():{};const p=[];
+     if(v.sbp)p.push(`blood pressure ${v.sbp}/${v.dbp} mmHg`);if(v.hba1c)p.push(`HbA1c ${v.hba1c}%`);if(v.ldl)p.push(`LDL ${v.ldl} mg/dL`);
+     return p.length?`Recent recorded results: ${p.join(", ")}. These are historical results from your record, not a current assessment.`:null})(),
+   dvStats:[{big:"5% DV",label:"or less sodium per serving is considered low."},{big:"20% DV",label:"or more per serving is considered high."},{big:"2,300 mg",label:"is the Daily Value for sodium. Choose a lower target only with your clinician."}],
+   days:[
+    D("Day 1","Fibre first",`Cinnamon oats with banana, pear and ${nut}; ${dairy} on the side.`,`Lentil-quinoa bowl with spinach, cucumber, carrot and avocado${fl.reflux?"; add tomato only if tolerated":""}.`,`Herb-baked ${fish}, roasted broccoli and baked sweet potato.`,`Apple with a spoon of ${has("nuts")?"seed butter":"unsalted peanut butter"}.`),
+    D("Day 2","Plant protein",`${dairy} with banana, rolled oats and ground flax.`,`Mashed chickpea ${has("wheat")?"bowl over rice":"pita"} with celery, parsley and greens.`,`Herb-roasted chicken, quinoa and sheet-pan zucchini with bell pepper.`,`Pear and a small handful of unsalted ${has("nuts")?"pumpkin seeds":"almonds"}.`),
+    D("Day 3","Leftovers work",`${grain} with avocado, cucumber and ${egg}.`,`Leftover chicken-quinoa bowl over greens with olive oil and herbs.`,`Red lentil, carrot and zucchini stew with spinach; side of brown rice.`,`Carrots and cucumber with no-salt-added hummus.`),
+    D("Day 4","Whole-food flavour",`Overnight oats with chopped apple, chia and cinnamon.`,`No-salt-added tuna and white-bean salad with greens, cucumber, dill and olive oil.`,`Mild ginger tofu stir-fry with broccoli and brown rice; a measured splash of low-sodium tamari.`,`Pear and unsalted ${nut}.`),
+    D("Day 5","No-cook lunch",`${dairy} with banana, pear and unsalted pumpkin seeds.`,`${has("wheat")?"Rice bowl":"Whole-wheat wrap"} with no-salt-added hummus, spinach, cucumber, carrot, bell pepper and avocado.`,`Black bean stuffed sweet potato with corn, cabbage, coriander and ${dairy}.`,`Air-popped popcorn with smoked paprika.`),
+    D("Day 6","Fish twice",`Smoothie with spinach, banana, oats, ${dairy} and ground flax.`,`Leftover ${fish}-quinoa salad with greens, cucumber and a yogurt-dill dressing.`,`Rosemary chicken, green beans and barley.`,`Grapes and unsalted ${has("nuts")?"seeds":"almonds"}.`),
+    D("Day 7","Pantry finish",`${has("nuts")?"Banana-oat":"Peanut-butter banana oats"} with cinnamon.`,`Smashed white beans on ${grain} with side greens.`,`${has("wheat")?"Brown rice":"Whole-wheat pasta"} with cannellini beans, spinach, mushrooms, zucchini, herbs and olive oil.`,`Berries with ${dairy}.`)],
+   portionGuide:"At lunch and dinner, aim for about half the plate vegetables, one quarter whole grains or starchy vegetables, and one quarter protein. Add or subtract grain, dairy and snacks to match hunger and energy needs.",
+   swaps:[{avoid:"Fish",instead:"Tofu or beans",keep:"Unsaturated fat plus plants"},{avoid:"Dairy",instead:"Unsweetened soy yogurt",keep:"Check calcium and sodium"},
+     {avoid:"Gluten",instead:"Brown rice or quinoa",keep:"A whole-grain choice"},{avoid:"Eggs",instead:"Bean mash or tofu",keep:"Protein at breakfast"},
+     {avoid:"A reflux trigger",instead:"A tolerated non-acidic option",keep:"Portions moderate"}],
+   eatingOut:"Ask for sauce and dressing on the side, skip cured meats, choose grilled or baked protein, and make vegetables the largest part of the plate. For reflux, avoid a large late dinner and swap only the triggers that actually bother you.",
+   recipes:[
+    {name:"Cinnamon fruit oats",meta:"1 serving · 10 minutes",use:`1/2 cup dry oats, 1 cup water or unsweetened milk, 1/2 banana, 1/2 pear, 1 Tbsp ${nut}, cinnamon.`,make:"Simmer the oats, then top with the fruit, nuts and cinnamon. Add yogurt if you want it creamier."},
+    {name:"Overnight apple oats",meta:"1 serving · 5 minutes plus chilling",use:`1/2 cup oats, 1/2 cup ${dairy}, 1/2 cup milk or water, 1/2 chopped apple, 1 tsp chia, cinnamon.`,make:"Stir everything together in a jar and refrigerate overnight. Eat cold or warmed."},
+    {name:"Lentil-quinoa crunch bowl",meta:"2 servings · 15 minutes after prep",use:"1 cup cooked lentils, 1 cup cooked quinoa, 2 cups greens, chopped cucumber and carrot, 1/2 avocado, olive oil, pepper.",make:"Divide into bowls. Whisk yogurt, dill, oil and a splash of water, and spoon it over just before eating."},
+    {name:`Herb-baked ${fish} plate`,meta:"2 servings · 30 minutes",use:`${fish==="salmon"?"Two 4-5 oz salmon fillets":"2 cups cooked white beans"}, 1 large sweet potato, 4 cups broccoli, 2 tsp olive oil, herbs, pepper.`,make:"Roast the sweet potato at 425°F until tender. Add the broccoli and protein for the final 12 to 15 minutes and finish with fresh herbs."},
+    {name:"Herb-roasted chicken tray",meta:"4 servings · 35 minutes",use:"1 lb skinless chicken, 2 zucchini, 2 bell peppers, 1 Tbsp olive oil, oregano, thyme, pepper.",make:"Roast at 425°F until the vegetables brown and the chicken is cooked through. Serve with quinoa and reserve two portions for later in the week."},
+    {name:"Red lentil vegetable stew",meta:"4 servings · 30 minutes",use:"1 cup rinsed red lentils, 2 diced carrots, 1 diced zucchini, 3 cups water, onion, cumin, mild paprika.",make:"Simmer for 20 to 25 minutes, then stir in spinach and thin with water as needed."}],
+   batchNote:"Cook oats fresh, but make the quinoa and lentils ahead. Refrigerate cooked grains and legumes promptly in shallow containers, use within three to four days, and freeze any extra portions.",
+   shopping:{produce:["Apples, 3","Bananas, 5","Pears, 2","Berries, 2 cups","Avocados, 3","Sweet potatoes, 4","Broccoli, 3 heads","Spinach and greens, 16 cups","Cucumbers, 3","Carrots, 1 bag","Bell peppers, 4","Zucchini, 3","Mushrooms, 12 oz","Green beans, 12 oz","Cabbage, 1 small","Onions, 4","Fresh herbs"],
+     proteins:[fish==="salmon"?"Salmon, about 1 lb":"White beans, 3 cans","Skinless chicken, 1.5 lb","Extra-firm tofu, 14 oz",has("egg")?"":"Eggs, 6",has("milk")?"Unsweetened soy yogurt, 32 oz":"Plain yogurt, 32 oz","No-salt-added tuna, 1 can"].filter(Boolean),
+     pantry:["Old-fashioned oats","Quinoa, brown rice and barley",has("wheat")?"Gluten-free grains and wraps":"Whole-wheat pasta, bread and wraps","Dry red and brown lentils","No-salt-added chickpeas, black beans and white beans",has("nuts")?"Pumpkin and sunflower seeds":"Unsalted almonds and walnuts","Ground flax and chia","Olive oil and vinegar","Low-sodium tamari","Cinnamon, cumin, paprika, oregano, pepper"]},
+   labelNote:"Compare sodium per serving on bread, wraps, hummus, canned fish, canned beans, tomatoes, sauces and plant milks. “Reduced sodium” is relative to the original product; the Nutrition Facts number is what decides.",
+   prep:[{title:"Start the grains",body:"Cook 2 cups of dry quinoa, brown rice or barley in parallel, then cool and portion."},
+     {title:"Cook the legumes",body:"Prepare the lentils, or rinse and drain no-salt-added canned beans."},
+     {title:"Run the oven",body:"Roast the sweet potatoes and two sheet pans of broccoli, peppers, zucchini and onion with olive oil and pepper."},
+     {title:"Wash and chop",body:"Prep the greens, cucumber, carrots and snack vegetables. Keep dressing separate."},
+     {title:"Make two flavour bases",body:"Stir a yogurt-dill dressing and mix a salt-free blend of paprika, cumin and pepper."},
+     {title:"Portion smart",body:"Refrigerate three to four days of cooked food and freeze anything for later in the week."}],
+   medsNote:"Keep taking medicines as prescribed, and confirm the current list with your clinician or pharmacist before choosing a stricter sodium target or any potassium-based salt substitute.",
+   adjustments:[{title:fl.reflux?"For reflux":"For busy evenings",body:fl.reflux?"Keep dinner moderate, finish eating at least three hours before lying down, and use acidic or spicy ingredients only when you tolerate them. Track your own triggers rather than removing every common one.":"Lean on the leftover days and the no-cook lunch. A plan you can keep on a hard day beats a perfect one you abandon."},
+     {title:fl.weight?"For weight and sleep health":"For appetite",body:fl.weight?"Start with the plate guide, eat slowly, and stop at comfortable fullness. If a weight-management medicine is listed in your record, ask the prescriber how to adjust portions if you have nausea or early fullness.":"If you are hungry between meals, add protein or fibre to the previous meal rather than adding another snack."}],
+   sources:[{title:"National Heart, Lung, and Blood Institute — DASH Eating Plan",note:"food-group pattern and sodium levels."},
+     {title:"American Heart Association — Diet and Lifestyle Recommendations",note:"whole foods, protein, fats, added sugar and sodium guidance."},
+     {title:"U.S. Food and Drug Administration — Sodium in Your Diet",note:"Daily Value and low/high % Daily Value thresholds."},
+     {title:"National Institute of Diabetes and Digestive and Kidney Diseases",note:"eating, diet and nutrition guidance for reflux and glucose."}]}}
+/* ---- render the plan to a PDF ---- */
+function mpRender(P){
+  const d=PdfDoc();const nm=S.name||t("hq_member");
+  const when=new Date().toLocaleDateString(LOCALE[S.lang]==="ar-OM"?"en-GB":LOCALE[S.lang],{month:"long",year:"numeric"});
+  const foot=t("mp_doc_foot");
+  /* 1 — cover */
+  d.add();mpEyebrow(d,t("mp_eyebrow"));mpH1(d,P.title);
+  d.y+=2;{const L=pdfWrap(P.subtitle,"F3",14,PDF_CW*0.86);L.forEach((ln,i)=>d.text(ln,PDF_M,d.y+i*19,"F3",14,C_BODY));d.y+=L.length*19+20}
+  mpHero(d,PDF_M,d.y,PDF_CW,200);d.y+=226;
+  mpStats(d,P.stats||[]);
+  mpCallout(d,t("mp_personalised"),P.personalized,"peach");
+  mpFooter(d,t("mp_prepared",{name:nm,when}),1);
+  /* 2 — the record */
+  d.add();mpEyebrow(d,t("mp_h_picture"));mpH2(d,t("mp_h_priorities"));d.y+=6;
+  mpCards(d,(P.priorities||[]).map((p,i)=>({n:"0"+(i+1),title:p.title,body:p.body})),2);d.y+=4;
+  if(P.clinicalNote)mpCallout(d,t("mp_labs"),P.clinicalNote,"green");
+  if(P.dvStats&&P.dvStats.length)mpStats(d,P.dvStats);
+  mpFooter(d,t("mp_f_priorities"),2);
+  /* 3 and 4 — the week */
+  const dayBlock=(day)=>{
+    d.line(PDF_M,d.y,PDF_W-PDF_M,d.y,[0.20,0.30,0.25],1);d.y+=16;
+    d.text(day.day,PDF_M,d.y,"F4",14,C_GREEN);
+    if(day.tag)d.textR(String(day.tag).toUpperCase(),PDF_W-PDF_M,d.y-1,"F2",8,C_RUST,{ls:1});
+    d.y+=15;
+    [["mp_breakfast",day.breakfast],["mp_lunch",day.lunch],["mp_dinner",day.dinner],["mp_snack",day.snack]].forEach(([k,v])=>{
+      if(!v)return;const lab=t(k)+": ",lw=pdfW(lab,"F2",9.6);
+      d.text(lab,PDF_M,d.y,"F2",9.6,C_RUST);
+      const first=pdfWrap(v,"F1",9.6,PDF_CW-lw);
+      d.text(first[0],PDF_M+lw,d.y,"F1",9.6,C_BODY);d.y+=13.4;
+      if(first.length>1)pdfWrap(first.slice(1).join(" "),"F1",9.6,PDF_CW).forEach(ln=>{d.text(ln,PDF_M,d.y,"F1",9.6,C_BODY);d.y+=13.4})});
+    d.y+=8};
+  d.add();mpEyebrow(d,t("mp_days14"));mpH2(d,t("mp_h_blocks"));d.y+=8;
+  (P.days||[]).slice(0,4).forEach(dayBlock);
+  if(P.portionGuide){d.y+=4;mpCallout(d,t("mp_portion"),P.portionGuide,"green")}
+  mpFooter(d,t("mp_f_week"),3);
+  d.add();mpEyebrow(d,t("mp_days57"));mpH2(d,t("mp_h_finish"));d.y+=8;
+  (P.days||[]).slice(4,7).forEach(dayBlock);
+  if(P.swaps&&P.swaps.length){d.y+=6;d.text(t("mp_h_swaps"),PDF_M,d.y,"F2",12,C_RUST);d.y+=16;
+    const cw=[PDF_CW*0.30,PDF_CW*0.34,PDF_CW*0.36];
+    [t("mp_sw1"),t("mp_sw2"),t("mp_sw3")].forEach((h,i)=>d.text(h.toUpperCase(),PDF_M+cw.slice(0,i).reduce((a,b)=>a+b,0),d.y,"F2",7.8,C_MUTE,{ls:0.8}));
+    d.y+=8;
+    P.swaps.slice(0,5).forEach(s=>{d.line(PDF_M,d.y,PDF_W-PDF_M,d.y,C_LINE,0.6);d.y+=13;
+      [s.avoid,s.instead,s.keep].forEach((v,i)=>d.text(v,PDF_M+cw.slice(0,i).reduce((a,b)=>a+b,0),d.y,"F1",9.4,C_BODY));d.y+=9});
+    d.line(PDF_M,d.y,PDF_W-PDF_M,d.y,C_LINE,0.6);d.y+=14}
+  if(P.eatingOut)mpCallout(d,t("mp_eatout"),P.eatingOut,"peach");
+  mpFooter(d,t("mp_f_week"),4);
+  /* 5 and 6 — recipes */
+  const recipeCol=(r,x,w)=>{let yy=d.y;
+    pdfWrap(r.name,"F4",13,w).forEach(ln=>{d.text(ln,x,yy,"F4",13,C_GREEN);yy+=16});
+    if(r.meta){d.text(r.meta,x,yy,"F2",8.6,C_RUST);yy+=14}
+    const put=(lead,body)=>{if(!body)return;const lw=pdfW(lead,"F2",9.4);
+      const L=pdfWrap(body,"F1",9.4,w-lw);d.text(lead,x,yy,"F2",9.4,C_BODY);d.text(L[0],x+lw,yy,"F1",9.4,C_BODY);yy+=13.2;
+      if(L.length>1)pdfWrap(L.slice(1).join(" "),"F1",9.4,w).forEach(ln=>{d.text(ln,x,yy,"F1",9.4,C_BODY);yy+=13.2});yy+=5};
+    put(t("mp_use")+" ",r.use);put(t("mp_make")+" ",r.make);
+    return yy};
+  const recipePage=(list,eyebrow,title,pageNo)=>{
+    d.add();mpEyebrow(d,eyebrow);mpH2(d,title);d.y+=10;
+    const w=(PDF_CW-22)/2;
+    for(let i=0;i<list.length;i+=2){const top=d.y;
+      const y1=recipeCol(list[i],PDF_M,w);let y2=top;
+      if(list[i+1]){d.y=top;y2=recipeCol(list[i+1],PDF_M+w+22,w)}
+      d.y=Math.max(y1,y2)+12}
+    return pageNo};
+  const recs=P.recipes||[];
+  recipePage(recs.slice(0,3),t("mp_core"),t("mp_h_core"));
+  if(P.batchNote)mpCallout(d,t("mp_batch"),P.batchNote,"green");
+  mpFooter(d,t("mp_f_recipes"),5);
+  if(recs.length>3){recipePage(recs.slice(3),t("mp_dinners"),t("mp_h_dinners"));mpFooter(d,t("mp_f_recipes"),6)}
+  /* 7 — shopping */
+  d.add();mpEyebrow(d,t("mp_shop"));mpH2(d,t("mp_h_shop"));d.y+=10;
+  const sh=P.shopping||{produce:[],proteins:[],pantry:[]};
+  const cols=[[t("mp_produce"),sh.produce||[]],[t("mp_proteins"),sh.proteins||[]],[t("mp_pantry"),sh.pantry||[]]];
+  const cwid=(PDF_CW-28)/2,top=d.y;
+  let colH=0;
+  const drawList=(x,yy,w,title,items)=>{d.text(title,x,yy,"F2",11,C_RUST);yy+=16;
+    items.forEach(it=>{const L=pdfWrap(it,"F1",9.2,w-14);d.circle(x+3.5,yy-3,1.6,C_RUST);
+      L.forEach((ln,i)=>{d.text(ln,x+11,yy,"F1",9.2,C_BODY);yy+=12.4})});return yy+8};
+  let ly=top+14,ry=top+14;
+  d.fill(PDF_M,top,cwid,0.01,C_WHITE);
+  ly=drawList(PDF_M+13,top+20,cwid-26,cols[0][0],cols[0][1]);
+  ry=drawList(PDF_M+cwid+28+13,top+20,cwid-26,cols[1][0],cols[1][1]);
+  ry=drawList(PDF_M+cwid+28+13,ry+6,cwid-26,cols[2][0],cols[2][1]);
+  const boxH=Math.max(ly,ry)-top+8;
+  d.rect(PDF_M,top,cwid,boxH,C_LINE);d.rect(PDF_M+cwid+28,top,cwid,boxH,C_LINE);
+  d.y=top+boxH+18;
+  if(P.labelNote)mpCallout(d,t("mp_labels"),P.labelNote,"green");
+  mpBody(d,t("mp_shop_note"),8.4,C_MUTE);
+  mpFooter(d,t("mp_f_shop"),recs.length>3?7:6);
+  /* 8 — prep, adjustments, sources */
+  d.add();mpEyebrow(d,t("mp_prep"));mpH2(d,t("mp_h_prep"));d.y+=12;
+  (P.prep||[]).forEach((s,i)=>{d.circle(PDF_M+8,d.y-3,8.5,[0.710,0.329,0.169]);
+    d.textC(String(i+1),PDF_M+8,d.y,"F2",9,C_WHITE);
+    const lead=s.title+". ",lw=pdfW(lead,"F2",9.8);
+    d.text(lead,PDF_M+24,d.y,"F2",9.8,C_BODY);
+    const L=pdfWrap(s.body,"F1",9.8,PDF_CW-24-lw);
+    d.text(L[0],PDF_M+24+lw,d.y,"F1",9.8,C_BODY);d.y+=13.6;
+    if(L.length>1)pdfWrap(L.slice(1).join(" "),"F1",9.8,PDF_CW-24).forEach(ln=>{d.text(ln,PDF_M+24,d.y,"F1",9.8,C_BODY);d.y+=13.6});
+    d.y+=7});
+  d.y+=6;
+  if(P.medsNote)mpCallout(d,t("mp_meds"),P.medsNote,"peach");
+  if(P.adjustments&&P.adjustments.length){d.text(t("mp_h_adjust"),PDF_M,d.y,"F2",12,C_RUST);d.y+=16;
+    mpCards(d,P.adjustments.map(a=>({title:a.title,body:a.body})),2);d.y+=6}
+  if(P.sources&&P.sources.length){d.text(t("mp_h_sources"),PDF_M,d.y,"F2",12,C_RUST);d.y+=16;
+    P.sources.forEach(s=>{d.circle(PDF_M+3.5,d.y-3,1.6,C_RUST);
+      const lead=s.title,lw=pdfW(lead+" ","F1",8.8);
+      const L=pdfWrap(lead+" — "+(s.note||""),"F1",8.8,PDF_CW-12);
+      L.forEach(ln=>{d.text(ln,PDF_M+11,d.y,"F1",8.8,C_BODY);d.y+=11.6});d.y+=2})}
+  d.y+=6;mpBody(d,t("mp_disclaimer"),8,C_MUTE);
+  mpFooter(d,foot,recs.length>3?8:7);
+  return d.build()}
+/* ---- flow ---- */
+function mpOffer(next){S.mpNext=next||null;
+  if(S.mealPlan){mpCard();return}
+  bot(t("mp_offer"));
+  replies([[t("mp_yes"),()=>mpBuild(),{react:"meals"}],[t("mp_no"),()=>{bot(t("mp_later"));mpDone()}]])}
+function mpDone(){const n=S.mpNext;S.mpNext=null;if(n)later(n);else if(S.coreDone)later(coreReplies);else later(coreDone)}
+function mpBuild(){clearReplies();
+  bot(t("mp_working"));
+  later(()=>new Promise(async res=>{
+    const ty=add("typing",'<span class="dots"><i></i><i></i><i></i></span>');const ts=ty.querySelector(".ts");if(ts)ts.remove();
+    let P=null;try{P=await mpAsk()}catch(e){console.warn("meal plan",e)}
+    const viaAI=!!P;if(!P)P=mpFallback();
+    let blob=null;try{blob=mpRender(P)}catch(e){console.error("meal plan pdf",e)}
+    ty.remove();
+    if(!blob){add("",`<p>${t("mp_fail")}</p>`);res();return}
+    if(S.mealPlan&&S.mealPlan.url)try{URL.revokeObjectURL(S.mealPlan.url)}catch(e){}
+    S.mealPlan={plan:P,blob,url:URL.createObjectURL(blob),date:now(),ai:viaAI,
+      name:`ELIA-meal-plan-${(S.name||"member").replace(/[^A-Za-z0-9]+/g,"-").toLowerCase()}.pdf`};
+    addFile({id:"mealplan",type:"mealplan",title:()=>t("file_mp"),body:mpFileHTML,link:"mealplan"});
+    addUpdate(()=>t("mp_upd"));renderHQ();flashHQ();
+    res()}));
+  later(()=>{mpCard();bot(t("mp_after"))});
+  later(mpReplies)}
+function mpSummary(){const P=S.mealPlan&&S.mealPlan.plan;if(!P)return"";
+  const kb=Math.max(1,Math.round((S.mealPlan.blob.size||0)/1024));
+  return`<div class="card mp-card"><div class="card-h"><span class="eyebrow">${t("mp_card_h")}</span><span class="ph">${t("ph_mp")}</span></div>
+  <h4 style="margin:0">${esc(P.title)}</h4><p style="margin:0;font-size:13.5px">${esc(P.subtitle)}</p>
+  <div class="mp-tiles">${(P.stats||[]).slice(0,3).map(s=>`<span><b>${esc(s.big)}</b><small>${esc(s.label)}</small></span>`).join("")}</div>
+  <div class="sec">${t("mp_whats_in")}</div><ul class="plain">${[t("mp_in1"),t("mp_in2"),t("mp_in3"),t("mp_in4")].map(x=>`<li>${x}</li>`).join("")}</ul>
+  <p class="mq-meta">${t("mp_filemeta",{kb})}${S.mealPlan.ai?"":" · "+t("mp_offline")}</p></div>`}
+function mpCard(){bot(mpSummary(),{cls:"wide",delay:600})}
+function mpReplies(){replies([[t("mp_open"),()=>{mpOpen();mpReplies()},{silent:true}],[t("mp_share"),()=>{mpShare();mpReplies()},{silent:true}],[t("mp_hq"),()=>{S.hqTab="files";S.openFile="mealplan";setView("hq");renderHQ()},{silent:true}],[t("mp_done"),mpDone]])}
+function mpOpen(){const m=S.mealPlan;if(!m)return;
+  const w=window.open(m.url,"_blank");
+  if(!w){const a=document.createElement("a");a.href=m.url;a.download=m.name;document.body.appendChild(a);a.click();a.remove()}}
+async function mpShare(){const m=S.mealPlan;if(!m)return;
+  try{const file=new File([m.blob],m.name,{type:"application/pdf"});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:m.plan.title,text:t("mp_share_text")});return}}catch(e){}
+  const a=document.createElement("a");a.href=m.url;a.download=m.name;document.body.appendChild(a);a.click();a.remove();
+  bot(t("mp_share_dl"))}
+function mpFileHTML(){const m=S.mealPlan;if(!m)return"";const P=m.plan;
+  return`<p style="margin:0"><b>${esc(P.title)}</b><br><span class="note">${esc(P.subtitle)}</span></p>
+  <ul class="plain">${(P.days||[]).slice(0,3).map(d=>`<li><b>${esc(d.day)}</b> · ${esc(d.dinner)}</li>`).join("")}<li class="note">${t("mp_plus_days")}</li></ul>
+  <div class="ins-actions"><button class="btn" data-mp="open">${t("mp_open")}</button><button class="btn ghost" data-mp="share">${t("mp_share")}</button><button class="btn ghost" data-mp="new">${t("mp_regen")}</button></div>`}
+document.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest("[data-mp]");if(!b)return;const a=b.dataset.mp;
+  if(a==="open")return mpOpen();
+  if(a==="share")return mpShare();
+  if(a==="new"){setView("chat");S.mealPlan=null;S.files=S.files.filter(f=>f.id!=="mealplan");renderHQ();mpBuild();return}});
+Object.assign(L.en,{mp_btn:"Plan my meals long term",p_mealplan:"Build a meal plan",file_mp:"Long-term meal plan",ph_mp:"Written by ELIA · dietitian method",
+ mp_offer:"One more thing worth doing while we're in the kitchen. I can write you a full week of eating, built around your record, your goal and how you actually cook, and hand it to you as a PDF you can keep or send to anyone. Want me to put it together?",
+ mp_yes:"Yes, write my plan",mp_no:"Not right now",mp_later:"No problem. It's there whenever you want it, under Quick actions or My Files.",
+ mp_working:"Give me a moment. I'm going through your record, your meals, your movement and what's in your kitchen, then writing the week around them.",
+ mp_card_h:"Your meal plan",mp_whats_in:"What's inside",mp_in1:"Seven days of breakfast, lunch, dinner and snacks",mp_in2:"Six core recipes, with leftovers built in",mp_in3:"One shopping list and a 75-minute prep block",mp_in4:"Swaps, eating-out notes and the reasoning behind each priority",
+ mp_filemeta:"PDF · {kb} KB · saved to My Files",mp_offline:"written offline",
+ mp_after:"It's saved to My Files, so it'll be there next time. Open it to read, or share it straight to whoever you cook with.",
+ mp_done:"That's everything",mp_open:"Open the PDF",mp_share:"Share",mp_hq:"See it in My Files",mp_regen:"Write a fresh plan",
+ mp_share_text:"My ELIA meal plan",mp_share_dl:"Downloaded, so you can attach it wherever you like.",
+ mp_fail:"I couldn't put the PDF together just now. Try again in a moment and I'll rebuild it.",mp_upd:"Long-term meal plan written",
+ mp_plus_days:"…and four more days, recipes, the shopping list and the prep block in the PDF.",
+ mp_eyebrow:"Personalised 7-day plan",mp_prepared:"Prepared for {name} · {when}",mp_doc_foot:"Long-term meal plan",
+ mp_personalised:"How this was personalised:",mp_labs:"Recent available results:",
+ mp_h_picture:"Your health picture",mp_h_priorities:"What matters most for you",mp_f_priorities:"Personalised priorities",
+ mp_days14:"Days 1-4",mp_h_blocks:"Start with repeatable building blocks",mp_days57:"Days 5-7",mp_h_finish:"Finish the week without food fatigue",mp_f_week:"Seven-day meal map",
+ mp_breakfast:"Breakfast",mp_lunch:"Lunch",mp_dinner:"Dinner",mp_snack:"Snack",mp_portion:"Portion guide:",
+ mp_h_swaps:"Optional swaps for preference or tolerance",mp_sw1:"If you do not eat",mp_sw2:"Use instead",mp_sw3:"Keep this constant",mp_eatout:"Eating out:",
+ mp_core:"Core recipes",mp_h_core:"A few anchors cover several meals",mp_dinners:"Dinner recipes",mp_h_dinners:"Simple seasoning keeps sodium optional",
+ mp_use:"Use:",mp_make:"Make:",mp_batch:"Batch note:",mp_f_recipes:"Recipes",
+ mp_shop:"Shopping list",mp_h_shop:"Buy once, then let ingredients repeat",mp_produce:"Produce",mp_proteins:"Proteins and dairy",mp_pantry:"Grains and pantry",
+ mp_labels:"Label priorities:",mp_shop_note:"Quantities assume one adult, with several intentional leftover portions. Adjust for appetite, household size and food waste.",mp_f_shop:"Shopping list",
+ mp_prep:"Prep and personalisation",mp_h_prep:"A 75-minute setup makes the week easier",mp_meds:"Use this as a food plan, not a treatment change:",
+ mp_h_adjust:"Your built-in adjustments",mp_h_sources:"Sources",
+ mp_disclaimer:"Written by ELIA from the information in your Prime Health profile and any connected health record. Recipe sodium is not calculated because brands and portions vary; use Nutrition Facts labels for precise totals. Review this plan with your clinician or a registered dietitian before making changes alongside treatment."});
+Object.assign(L.es,{mp_btn:"Planear mis comidas a largo plazo",p_mealplan:"Crear un plan de comidas",file_mp:"Plan de comidas a largo plazo",ph_mp:"Escrito por ELIA · método de dietista",
+ mp_offer:"Una cosa más que vale la pena mientras estamos en la cocina. Puedo escribirte una semana completa de alimentación, basada en tu historial, tu meta y cómo cocinas de verdad, y dártela en PDF para guardarla o enviarla. ¿La preparo?",
+ mp_yes:"Sí, escribe mi plan",mp_no:"Ahora no",mp_later:"Sin problema. Estará ahí cuando quieras, en Acciones rápidas o en Mis archivos.",
+ mp_working:"Dame un momento. Estoy revisando tu historial, tus comidas, tu movimiento y lo que hay en tu cocina, y escribiendo la semana alrededor de eso.",
+ mp_card_h:"Tu plan de comidas",mp_whats_in:"Qué incluye",mp_in1:"Siete días de desayuno, comida, cena y snacks",mp_in2:"Seis recetas base, con sobras ya previstas",mp_in3:"Una lista de compras y un bloque de preparación de 75 minutos",mp_in4:"Sustituciones, notas para comer fuera y el porqué de cada prioridad",
+ mp_filemeta:"PDF · {kb} KB · guardado en Mis archivos",mp_offline:"escrito sin conexión",
+ mp_after:"Está guardado en Mis archivos, así que seguirá ahí la próxima vez. Ábrelo para leerlo o compártelo con quien cocines.",
+ mp_done:"Eso es todo",mp_open:"Abrir el PDF",mp_share:"Compartir",mp_hq:"Verlo en Mis archivos",mp_regen:"Escribir un plan nuevo",
+ mp_share_text:"Mi plan de comidas de ELIA",mp_share_dl:"Descargado, para que lo adjuntes donde quieras.",
+ mp_fail:"No pude armar el PDF en este momento. Inténtalo de nuevo y lo reconstruyo.",mp_upd:"Plan de comidas a largo plazo escrito",
+ mp_plus_days:"…y cuatro días más, recetas, la lista de compras y el bloque de preparación en el PDF.",
+ mp_eyebrow:"Plan personalizado de 7 días",mp_prepared:"Preparado para {name} · {when}",mp_doc_foot:"Plan de comidas a largo plazo",
+ mp_personalised:"Cómo se personalizó:",mp_labs:"Resultados recientes disponibles:",
+ mp_h_picture:"Tu panorama de salud",mp_h_priorities:"Lo que más importa para ti",mp_f_priorities:"Prioridades personalizadas",
+ mp_days14:"Días 1-4",mp_h_blocks:"Empieza con bloques repetibles",mp_days57:"Días 5-7",mp_h_finish:"Termina la semana sin fatiga de comida",mp_f_week:"Mapa de comidas de siete días",
+ mp_breakfast:"Desayuno",mp_lunch:"Comida",mp_dinner:"Cena",mp_snack:"Snack",mp_portion:"Guía de porciones:",
+ mp_h_swaps:"Sustituciones opcionales por gusto o tolerancia",mp_sw1:"Si no comes",mp_sw2:"Usa en su lugar",mp_sw3:"Mantén constante",mp_eatout:"Comer fuera:",
+ mp_core:"Recetas base",mp_h_core:"Unas cuantas bases cubren varias comidas",mp_dinners:"Recetas de cena",mp_h_dinners:"Sazonar simple mantiene el sodio opcional",
+ mp_use:"Usa:",mp_make:"Prepara:",mp_batch:"Nota de preparación:",mp_f_recipes:"Recetas",
+ mp_shop:"Lista de compras",mp_h_shop:"Compra una vez y deja que los ingredientes se repitan",mp_produce:"Frutas y verduras",mp_proteins:"Proteínas y lácteos",mp_pantry:"Granos y despensa",
+ mp_labels:"Prioridades de etiqueta:",mp_shop_note:"Las cantidades asumen un adulto, con varias porciones de sobra intencionales. Ajusta según apetito, tamaño del hogar y desperdicio.",mp_f_shop:"Lista de compras",
+ mp_prep:"Preparación y personalización",mp_h_prep:"Un montaje de 75 minutos facilita la semana",mp_meds:"Úsalo como plan de alimentación, no como cambio de tratamiento:",
+ mp_h_adjust:"Tus ajustes incorporados",mp_h_sources:"Fuentes",
+ mp_disclaimer:"Escrito por ELIA a partir de tu perfil de Prime Health y de cualquier historial conectado. El sodio de las recetas no está calculado porque marcas y porciones varían; usa las etiquetas nutricionales para totales precisos. Revisa este plan con tu médico o un dietista registrado antes de hacer cambios junto a un tratamiento."});
+Object.assign(L.ar,{mp_btn:"خطة وجبات طويلة المدى",p_mealplan:"إنشاء خطة وجبات",file_mp:"خطة وجبات طويلة المدى",ph_mp:"كتبتها ELIA · بمنهج أخصائي التغذية",
+ mp_offer:"أمر أخير يستحق ونحن في المطبخ. يمكنني أن أكتب لك أسبوعًا كاملًا من الطعام مبنيًا على سجلك وهدفك وطريقتك الفعلية في الطبخ، وأسلّمه لك ملف PDF تحتفظ به أو ترسله لمن تشاء. أجهّزه؟",
+ mp_yes:"نعم، اكتبي خطتي",mp_no:"ليس الآن",mp_later:"لا مشكلة. ستجدها متى أردت في الإجراءات السريعة أو في ملفاتي.",
+ mp_working:"أمهلني لحظة. أراجع سجلك ووجباتك وحركتك وما يوجد في مطبخك، ثم أكتب الأسبوع حولها.",
+ mp_card_h:"خطة وجباتك",mp_whats_in:"ماذا تتضمن",mp_in1:"سبعة أيام من الفطور والغداء والعشاء والوجبات الخفيفة",mp_in2:"ست وصفات أساسية مع احتساب البواقي",mp_in3:"قائمة تسوق واحدة وجلسة تحضير من 75 دقيقة",mp_in4:"بدائل وملاحظات للأكل خارج المنزل وسبب كل أولوية",
+ mp_filemeta:"PDF · {kb} كيلوبايت · محفوظ في ملفاتي",mp_offline:"كُتبت دون اتصال",
+ mp_after:"حُفظت في ملفاتي، وستبقى هناك في المرة القادمة. افتحها للقراءة أو شاركها مع من يطبخ معك.",
+ mp_done:"هذا كل شيء",mp_open:"افتح ملف PDF",mp_share:"مشاركة",mp_hq:"اعرضها في ملفاتي",mp_regen:"اكتبي خطة جديدة",
+ mp_share_text:"خطة وجباتي من ELIA",mp_share_dl:"نُزّلت، لترفقها حيث تشاء.",
+ mp_fail:"تعذّر إعداد ملف PDF الآن. حاول بعد قليل وسأعيد بناءه.",mp_upd:"كُتبت خطة وجبات طويلة المدى",
+ mp_plus_days:"…وأربعة أيام أخرى والوصفات وقائمة التسوق وجلسة التحضير داخل الملف.",
+ mp_eyebrow:"خطة مخصصة لسبعة أيام",mp_prepared:"أُعدّت لـ {name} · {when}",mp_doc_foot:"خطة وجبات طويلة المدى",
+ mp_personalised:"كيف خُصِّصت:",mp_labs:"أحدث النتائج المتاحة:",
+ mp_h_picture:"صورتك الصحية",mp_h_priorities:"الأهم بالنسبة لك",mp_f_priorities:"أولويات مخصصة",
+ mp_days14:"الأيام 1-4",mp_h_blocks:"ابدأ بوحدات قابلة للتكرار",mp_days57:"الأيام 5-7",mp_h_finish:"أنهِ الأسبوع دون ملل من الطعام",mp_f_week:"خريطة وجبات سبعة أيام",
+ mp_breakfast:"الفطور",mp_lunch:"الغداء",mp_dinner:"العشاء",mp_snack:"وجبة خفيفة",mp_portion:"دليل الحصص:",
+ mp_h_swaps:"بدائل اختيارية حسب التفضيل أو التحمل",mp_sw1:"إذا كنت لا تأكل",mp_sw2:"استخدم بدلًا منه",mp_sw3:"حافظ على هذا",mp_eatout:"الأكل خارج المنزل:",
+ mp_core:"الوصفات الأساسية",mp_h_core:"وصفات قليلة تغطي وجبات عدة",mp_dinners:"وصفات العشاء",mp_h_dinners:"التتبيل البسيط يبقي الصوديوم اختياريًا",
+ mp_use:"المكونات:",mp_make:"الطريقة:",mp_batch:"ملاحظة التحضير:",mp_f_recipes:"الوصفات",
+ mp_shop:"قائمة التسوق",mp_h_shop:"تسوّق مرة واحدة ودع المكونات تتكرر",mp_produce:"الخضار والفواكه",mp_proteins:"البروتينات والألبان",mp_pantry:"الحبوب والمؤن",
+ mp_labels:"أولويات الملصق:",mp_shop_note:"الكميات مقدّرة لشخص بالغ واحد مع حصص فائضة مقصودة. عدّلها حسب الشهية وحجم الأسرة وهدر الطعام.",mp_f_shop:"قائمة التسوق",
+ mp_prep:"التحضير والتخصيص",mp_h_prep:"إعداد من 75 دقيقة يسهّل الأسبوع",mp_meds:"استخدمها كخطة طعام لا كتغيير للعلاج:",
+ mp_h_adjust:"تعديلاتك المدمجة",mp_h_sources:"المصادر",
+ mp_disclaimer:"كتبتها ELIA من معلومات ملفك في Prime Health ومن أي سجل صحي متصل. لم يُحتسب الصوديوم في الوصفات لأن العلامات التجارية والحصص تختلف؛ استخدم ملصقات القيم الغذائية للحصول على مجاميع دقيقة. راجع هذه الخطة مع طبيبك أو أخصائي تغذية مسجل قبل إجراء تغييرات مع العلاج."});
+
 /* ============ Prime Health AI Cover ============ */
 /* ============ Prime Health AI Cover (supplemental plan, simulated Stripe checkout) ============ */
 const AIC={price:29,currency:"OMR",usd:75,id:"prime_ai_cover_monthly",
@@ -4020,7 +4526,8 @@ function makeRecipe(){const avail=S.ingredients.filter(k=>!(ING[k].a&&S.allergie
   bot(t("rc_saved"));kitchenNext()}
 function kitchenNext(){replies([[t("shop_btn"),()=>{const r=S.recipe;const items=(r.miss.length?r.miss:["onion"]).map(ingName);bot(t("shop",{items:listJoin(items)}));addFile({id:"shop",type:"shop",title:()=>t("file_shop"),body:()=>`<ul class="plain">${(r.miss.length?r.miss:["onion"]).map(k=>`<li>${ingName(k)}</li>`).join("")}</ul>`});renderHQ();kitchenNext()},{react:"grocery"}],
   [t("serv_btn"),()=>{bot(t("ask_serv"));replies([1,2,4,6].map(n=>[String(n),()=>{S.recipe.serv=n;S.recipe.ver++;const f=S.files.find(f=>f.id==="recipe");f.ver=S.recipe.ver;f.date=now();renderHQ();bot(t("serv_done",{n}));kitchenNext()}]))}],
-  [t("good_btn"),coreDone]])}
+  [t("mp_btn"),()=>mpOffer(),{react:"meals"}],
+  [t("good_btn"),()=>mpOffer()]])}
 function recipeHTML(inChat){const r=S.recipe;if(!r)return"";const all=[...(r.p?[r.p]:[]),...r.v,...(r.c?[r.c]:[])];
   const vnames=listJoin(r.v.map(ingName));
   return`<div class="card-h"><span class="eyebrow">${t("k_recipe")}</span>${r.state==="paused"?`<span class="pill p-warn">${t("st_paused")}</span>`:""}</div><h4>${recipeName(r)}</h4><p style="margin:0;font-size:13.5px">${t("rc_why")}${r.removed.length?t("rc_allergy",{a:listJoin(r.removed.map(ingName))}):""}</p>
@@ -4297,6 +4804,8 @@ $("#pTri").onclick=()=>{setView("chat");pickSymptom()};
 /* Quick goal starts: begin a pillar from wherever the demo is (an example member is loaded first if nobody has onboarded) */
 function qaStart(goal){setView("chat");gen++;chain=Promise.resolve();clearReplies();S.await=null;S.curReplies=null;if(!S.name){loadPersona();S.langChosen=true}
   S.goal=goal;setFact("goal",{k:"goal_"+goal},"src_chat","cf_conf");renderHQ();sys(t("qa_"+goal))}
+$("#pMealPlan").onclick=()=>{setView("chat");gen++;chain=Promise.resolve();clearReplies();S.await=null;S.curReplies=null;if(!S.name){loadPersona();S.langChosen=true}
+  if(S.mealPlan){mpCard();later(mpReplies)}else mpBuild()};
 $("#pSleep").onclick=()=>{qaStart("sleep");S.sleepDone=false;S.sl={};S.slNext=S.plan?coreDone:profile;askSleep()};
 $("#pMove").onclick=()=>{qaStart(S.goal&&S.goal!=="sleep"&&S.goal!=="eat"?S.goal:"energy");if(!S.plan){S.plan=buildPlan("move",false);S.plan.status="accepted";S.plan.actions.forEach(a=>a.state="accepted")}else if(!getAct("move")){S.plan.actions.unshift(moveAction(20,"freq3"))}S.mv={};askInjury()};
 $("#pDiet").onclick=()=>{qaStart("eat");S.afterMeal=S.plan?()=>{S.kitchenOffered=false;afterMove()}:null;askMeal()};
