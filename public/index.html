@@ -3399,6 +3399,27 @@ function mpFlags(){
     weight:/obes|overweight/.test(txt)||S.goal==="weight",
     allerg:(S.allergies||[]).slice()}}
 /* ---- the dietitian: Claude writes the plan, grounded in everything above ---- */
+/* The plan is long JSON, and a model will occasionally leave a quote or a newline loose inside a string.
+   Repair the usual defects rather than throwing the whole document away. */
+function mpFixQuotes(t){let o="",inStr=false,esc=false;
+  for(let i=0;i<t.length;i++){const c=t[i];
+    if(esc){o+=c;esc=false;continue}
+    if(c==="\\"){o+=c;esc=true;continue}
+    if(c==='"'){
+      if(!inStr){inStr=true;o+=c;continue}
+      let j=i+1;while(j<t.length&&/\s/.test(t[j]))j++;
+      if(j>=t.length||/[,:}\]]/.test(t[j])){inStr=false;o+=c}else o+='\\"';
+      continue}
+    if(inStr&&(c==="\n"||c==="\r")){o+="\\n";continue}
+    o+=c}
+  return o}
+async function mpJson(s,prompt,opts){let t="";
+  try{const r=await s(prompt,opts);t=((r&&r.text)||"").trim()}catch(e){console.warn("meal plan call",e);return null}
+  t=t.replace(/^```(?:json)?\s*/i,"").replace(/```\s*$/,"");
+  const a=t.indexOf("{"),b=t.lastIndexOf("}");if(a<0||b<=a)return null;t=t.slice(a,b+1);
+  const noTrail=x=>x.replace(/,\s*([}\]])/g,"$1");
+  for(const v of [t,noTrail(t),mpFixQuotes(t),noTrail(mpFixQuotes(t))]){try{return JSON.parse(v)}catch(e){}}
+  console.warn("meal plan: could not parse",t.length,"chars");return null}
 async function mpAsk(){const s=sampleOff?null:await getSample();if(!s)return null;
   const inp=mpInputs();
   const ctx=`MEMBER PROFILE
@@ -3417,7 +3438,7 @@ RULES
 - This is typeset into a fixed page layout, so keep to these lengths: title at most 6 words; subtitle at most 30 words; personalized at most 60 words; each priority body at most 40 words; clinicalNote at most 45 words; each meal line at most 22 words; portionGuide, eatingOut, batchNote, labelNote and medsNote at most 45 words each; each recipe "use" at most 35 words and "make" at most 45 words; each prep body at most 28 words; each adjustment body at most 45 words; shopping entries 2 to 4 words each, at most 18 produce, 8 proteins and 14 pantry.
 - Use plain straight text inside JSON strings: no double quotes, no line breaks, no backslashes.`;
   let A=null,B=null;
-  try{A=await s.json(`${rules}
+  try{A=await mpJson(s,`${rules}
 
 ${ctx}
 
@@ -3434,7 +3455,7 @@ Reply with only JSON:
 "swaps":[{"avoid":string,"instead":string,"keep":string}] 4 to 5,
 "eatingOut":string}`,{modelTier:"default",maxTokens:6000,thinking:false})}catch(e){console.warn("meal plan A",e)}
   if(!A||!A.days||!A.days.length)return null;
-  try{B=await s.json(`${rules}
+  try{B=await mpJson(s,`${rules}
 
 ${ctx}
 
