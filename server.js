@@ -117,13 +117,18 @@ async function aiCall(req, res) {
   const images = (Array.isArray(body.images) ? body.images : []).slice(0, 3).filter((i) => i && /^image\/(jpeg|png|webp|gif)$/.test(i.media_type) && typeof i.data === "string" && i.data.length < 6_000_000);
   const lastUser = merged[merged.length - 1];
   if (images.length) lastUser.content = [...images.map((i) => ({ type: "image", source: { type: "base64", media_type: i.media_type, data: i.data } })), { type: "text", text: lastUser.content }];
+  const payload = { model: AI_MODELS[body.tier] || AI_MODELS.default, max_tokens: Math.min(32000, Math.max(256, Number(body.max_tokens) || 1500)), system: AI_SYSTEM, messages: merged };
+  // long structured answers (the meal plan) ask for thinking off: it is the whole latency, and the schema does the reasoning
+  const noThink = body.thinking === false;
   try {
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
+    const post = (extra) => fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": AI_KEY, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model: AI_MODELS[body.tier] || AI_MODELS.default, max_tokens: Math.min(32000, Math.max(256, Number(body.max_tokens) || 1500)), system: AI_SYSTEM, messages: merged }),
+      body: JSON.stringify({ ...payload, ...extra }),
     });
-    const j = await r.json().catch(() => ({}));
+    let r = await post(noThink ? { thinking: { type: "disabled" } } : {});
+    let j = await r.json().catch(() => ({}));
+    if (!r.ok && noThink) { r = await post({}); j = await r.json().catch(() => ({})); }  // model refused the flag: take it with thinking
     if (!r.ok) { console.error("Claude API error", r.status, j.error && j.error.type); return send(res, r.status === 429 ? 429 : 502, { error: r.status === 429 ? "rate_limited" : "upstream" }); }
     const text = (j.content || []).filter((c) => c.type === "text").map((c) => c.text).join("");
     return send(res, 200, { text, truncated: j.stop_reason === "max_tokens" });

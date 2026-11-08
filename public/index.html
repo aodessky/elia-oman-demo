@@ -1724,7 +1724,7 @@ appConfig();
 async function serverSample(){const c=await appConfig();if(!c.ai)return null;
   const shrink=f=>new Promise(res=>{const img=new Image(),u=URL.createObjectURL(f);img.onload=()=>{const k=Math.min(1,1568/Math.max(img.width,img.height));const cv=document.createElement("canvas");cv.width=Math.round(img.width*k);cv.height=Math.round(img.height*k);cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height);URL.revokeObjectURL(u);res(cv.toDataURL("image/jpeg",0.85).split(",")[1])};img.onerror=()=>{URL.revokeObjectURL(u);res(null)};img.src=u});
   async function call(input,o={}){const list=o.images?(Array.isArray(o.images)?o.images:[o.images]):[];const images=[];for(const f of list.slice(0,3)){const d=await shrink(f);if(d)images.push({media_type:"image/jpeg",data:d})}
-    const r=await fetch("/api/ai",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({input,images,tier:o.modelTier||"default",max_tokens:o.maxTokens||undefined})});const j=await r.json().catch(()=>({}));
+    const r=await fetch("/api/ai",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({input,images,tier:o.modelTier||"default",max_tokens:o.maxTokens||undefined,thinking:o.thinking})});const j=await r.json().catch(()=>({}));
     if(!r.ok){const e=new Error(j.error||"ai_error");e.code=r.status===429?"rate_limited":(j.error||"ai_error");throw e}
     if(o.onText)o.onText({text:j.text,delta:j.text});return{text:j.text,truncated:!!j.truncated}}
   const s=(i,o)=>call(i,o);
@@ -3432,7 +3432,7 @@ Reply with only JSON:
 "days":[{"day":string,"tag":string,"breakfast":string,"lunch":string,"dinner":string,"snack":string}] exactly 7,
 "portionGuide":string,
 "swaps":[{"avoid":string,"instead":string,"keep":string}] 4 to 5,
-"eatingOut":string}`,{modelTier:"default",maxTokens:16000})}catch(e){console.warn("meal plan A",e)}
+"eatingOut":string}`,{modelTier:"default",maxTokens:6000,thinking:false})}catch(e){console.warn("meal plan A",e)}
   if(!A||!A.days||!A.days.length)return null;
   try{B=await s.json(`${rules}
 
@@ -3451,7 +3451,7 @@ Reply with only JSON:
 "prep":[{"title":string,"body":string}] exactly 6,
 "medsNote":string,
 "adjustments":[{"title":string,"body":string}] exactly 2,
-"sources":[{"title":string,"note":string}] 3 to 5}`,{modelTier:"default",maxTokens:16000})}catch(e){console.warn("meal plan B",e)}
+"sources":[{"title":string,"note":string}] 3 to 5}`,{modelTier:"default",maxTokens:6000,thinking:false})}catch(e){console.warn("meal plan B",e)}
   const fb=mpFallback();
   return{...fb,...A,...(B&&B.recipes&&B.recipes.length?B:{})}}
 /* ---- offline fallback: a real plan, assembled from the member's own flags ---- */
