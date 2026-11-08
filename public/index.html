@@ -3453,7 +3453,7 @@ Reply with only JSON:
 "days":[{"day":string,"tag":string,"breakfast":string,"lunch":string,"dinner":string,"snack":string}] exactly 7,
 "portionGuide":string,
 "swaps":[{"avoid":string,"instead":string,"keep":string}] 4 to 5,
-"eatingOut":string}`,{modelTier:"default",maxTokens:6000,thinking:false})}catch(e){console.warn("meal plan A",e)}
+"eatingOut":string}`,{modelTier:"quick",maxTokens:8000,thinking:false})}catch(e){console.warn("meal plan A",e)}
   if(!A||!A.days||!A.days.length)return null;
   try{B=await mpJson(s,`${rules}
 
@@ -3472,7 +3472,7 @@ Reply with only JSON:
 "prep":[{"title":string,"body":string}] exactly 6,
 "medsNote":string,
 "adjustments":[{"title":string,"body":string}] exactly 2,
-"sources":[{"title":string,"note":string}] 3 to 5}`,{modelTier:"default",maxTokens:6000,thinking:false})}catch(e){console.warn("meal plan B",e)}
+"sources":[{"title":string,"note":string}] 3 to 5}`,{modelTier:"quick",maxTokens:8000,thinking:false})}catch(e){console.warn("meal plan B",e)}
   const fb=mpFallback();
   return{...fb,...A,...(B&&B.recipes&&B.recipes.length?B:{})}}
 /* ---- offline fallback: a real plan, assembled from the member's own flags ---- */
