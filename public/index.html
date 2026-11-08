@@ -3650,12 +3650,17 @@ function mpSummary(){const P=S.mealPlan&&S.mealPlan.plan;if(!P)return"";
   <p class="mq-meta">${t("mp_filemeta",{kb})}${S.mealPlan.ai?"":" · "+t("mp_offline")}</p></div>`}
 function mpCard(){bot(mpSummary(),{cls:"wide",delay:600})}
 function mpReplies(){replies([[t("mp_open"),()=>{mpOpen();mpReplies()},{silent:true}],[t("mp_share"),()=>{mpShare();mpReplies()},{silent:true}],[t("mp_hq"),()=>{S.hqTab="files";S.openFile="mealplan";setView("hq");renderHQ()},{silent:true}],[t("mp_done"),mpDone]])}
-function mpOpen(){const m=S.mealPlan;if(!m)return;
+/* the artifact viewer blocks plain downloads and window.open, so hand the file to the host when it offers that */
+async function mpHost(m){try{if(window.claude&&typeof claude.use==="function"){const dl=await claude.use("downloads");
+  if(dl){await dl.save({filename:m.name,data:m.blob});return true}}}catch(e){}return false}
+async function mpOpen(){const m=S.mealPlan;if(!m)return;
+  if(await mpHost(m))return;
   const w=window.open(m.url,"_blank");
   if(!w){const a=document.createElement("a");a.href=m.url;a.download=m.name;document.body.appendChild(a);a.click();a.remove()}}
 async function mpShare(){const m=S.mealPlan;if(!m)return;
   try{const file=new File([m.blob],m.name,{type:"application/pdf"});
     if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:m.plan.title,text:t("mp_share_text")});return}}catch(e){}
+  if(await mpHost(m))return;
   const a=document.createElement("a");a.href=m.url;a.download=m.name;document.body.appendChild(a);a.click();a.remove();
   bot(t("mp_share_dl"))}
 function mpFileHTML(){const m=S.mealPlan;if(!m)return"";const P=m.plan;
