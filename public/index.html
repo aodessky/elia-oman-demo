@@ -1724,7 +1724,7 @@ appConfig();
 async function serverSample(){const c=await appConfig();if(!c.ai)return null;
   const shrink=f=>new Promise(res=>{const img=new Image(),u=URL.createObjectURL(f);img.onload=()=>{const k=Math.min(1,1568/Math.max(img.width,img.height));const cv=document.createElement("canvas");cv.width=Math.round(img.width*k);cv.height=Math.round(img.height*k);cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height);URL.revokeObjectURL(u);res(cv.toDataURL("image/jpeg",0.85).split(",")[1])};img.onerror=()=>{URL.revokeObjectURL(u);res(null)};img.src=u});
   async function call(input,o={}){const list=o.images?(Array.isArray(o.images)?o.images:[o.images]):[];const images=[];for(const f of list.slice(0,3)){const d=await shrink(f);if(d)images.push({media_type:"image/jpeg",data:d})}
-    const r=await fetch("/api/ai",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({input,images,tier:o.modelTier||"default"})});const j=await r.json().catch(()=>({}));
+    const r=await fetch("/api/ai",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({input,images,tier:o.modelTier||"default",max_tokens:o.maxTokens||undefined})});const j=await r.json().catch(()=>({}));
     if(!r.ok){const e=new Error(j.error||"ai_error");e.code=r.status===429?"rate_limited":(j.error||"ai_error");throw e}
     if(o.onText)o.onText({text:j.text,delta:j.text});return{text:j.text,truncated:!!j.truncated}}
   const s=(i,o)=>call(i,o);
@@ -3400,48 +3400,58 @@ function mpFlags(){
     allerg:(S.allergies||[]).slice()}}
 /* ---- the dietitian: Claude writes the plan, grounded in everything above ---- */
 async function mpAsk(){const s=sampleOff?null:await getSample();if(!s)return null;
-  const inp=mpInputs();const fl=mpFlags();
-  const schema=`{"title":string,"subtitle":string,"personalized":string,
-"stats":[{"big":string,"label":string}] (exactly 3),
-"priorities":[{"title":string,"body":string}] (exactly 4),
-"clinicalNote":string|null,"dvStats":[{"big":string,"label":string}] (exactly 3),
-"days":[{"day":string,"tag":string,"breakfast":string,"lunch":string,"dinner":string,"snack":string}] (exactly 7),
-"portionGuide":string,
-"swaps":[{"avoid":string,"instead":string,"keep":string}] (4 to 5),
-"eatingOut":string,
-"recipes":[{"name":string,"meta":string,"use":string,"make":string}] (exactly 6),
-"batchNote":string,
-"shopping":{"produce":[string],"proteins":[string],"pantry":[string]},
-"labelNote":string,
-"prep":[{"title":string,"body":string}] (exactly 6),
-"medsNote":string,
-"adjustments":[{"title":string,"body":string}] (exactly 2),
-"sources":[{"title":string,"note":string}] (3 to 5)}`;
-  const j=await s.json(`You are a registered dietitian writing a personalised 7-day eating plan for one member of Prime Health. Write it the way an experienced clinical dietitian would: specific, practical, non-faddish, and anchored to this person's own record.
-
-MEMBER PROFILE
+  const inp=mpInputs();
+  const ctx=`MEMBER PROFILE
 ${inp.profile}
 
-${inp.record?`CONNECTED HEALTH RECORD (use the conditions, medicines and labs that matter for food; ignore the rest)\n${inp.record}`:"No health record is connected; build the plan from the profile above and say so in \"personalized\"."}
+${inp.record?`CONNECTED HEALTH RECORD (use the conditions, medicines and labs that bear on food; ignore the rest)\n${inp.record}`:"No health record is connected; build the plan from the profile above and say so in \"personalized\"."}`;
+  const rules=`You are a registered dietitian writing a personalised 7-day eating plan for one member of Prime Health. Write the way an experienced clinical dietitian would: specific, practical, non-faddish, and anchored to this person's own record.
 
 RULES
 - Shape the plan around the conditions actually present. Lower sodium and a DASH-style pattern for raised blood pressure; carbohydrate quality and spacing for raised HbA1c or glucose; soluble fibre and unsaturated fats for raised LDL; moderate portions and protein at each meal for weight goals; meal timing and trigger awareness for reflux.
-- Respect every allergy and avoidance absolutely: never place an allergen in a meal, recipe or the shopping list.
+- Respect every allergy and avoidance absolutely: never put an allergen in a meal, a recipe or the shopping list.
 - Use what they already have at home where it fits, and keep cooking within the time they said they have.
 - Reuse ingredients across the week so one shop covers it, and build in leftovers.
-- Never change, start or stop a medicine. If the record lists medicines that interact with food (potassium, warfarin, diuretics), say to confirm with their clinician or pharmacist rather than giving a number.
-- "stats" are three headline facts about the plan itself, for example {"big":"7 days","label":"Breakfast, lunch, dinner and flexible snacks."}.
-- "dvStats" are three nutrition-label reference facts relevant to this person (sodium or added sugar or fibre thresholds).
-- "priorities" are the four things that matter most for this person, each with a short reason drawn from their record.
-- "clinicalNote" summarises the relevant labs and vitals with their dates, or null if none are available.
-- Each day's meals are one line each, concrete, naming foods not nutrients. "tag" is two or three words, like "Fibre first".
-- "recipes": six that cover several meals between them. "meta" like "2 servings · 30 minutes". "use" is the ingredient line, "make" the method in two or three sentences.
-- Write in ${LANG_NAME[S.lang]==="Modern Standard Arabic"?"English (the document is typeset in a Latin font)":LANG_NAME[S.lang]}.
-- Plain language, no markdown, no emoji. Do not invent lab values or conditions that are not above.
+- Never change, start or stop a medicine. Where the record lists medicines that interact with food, say to confirm with their clinician or pharmacist rather than giving a number.
+- Write in ${LANG_NAME[S.lang]==="Modern Standard Arabic"?"English (the document is typeset in a Latin font)":LANG_NAME[S.lang]}. Plain language, no markdown, no emoji. Never invent labs or conditions that are not given.`;
+  let A=null,B=null;
+  try{A=await s.json(`${rules}
 
-Reply with only JSON matching this shape:
-${schema}`,{modelTier:"default"});
-  return j&&j.days&&j.days.length?j:null}
+${ctx}
+
+Write the first half of the document. "stats" are three headline facts about the plan itself, for example {"big":"7 days","label":"Breakfast, lunch, dinner and flexible snacks."}. "dvStats" are three nutrition-label reference facts that matter for this person. "priorities" are the four things that matter most, each with a reason drawn from their record. "clinicalNote" summarises the relevant labs and vitals with their dates, or null if there are none. Each meal is one concrete line naming foods, not nutrients; "tag" is two or three words.
+
+Reply with only JSON:
+{"title":string,"subtitle":string,"personalized":string,
+"stats":[{"big":string,"label":string}] exactly 3,
+"priorities":[{"title":string,"body":string}] exactly 4,
+"clinicalNote":string|null,
+"dvStats":[{"big":string,"label":string}] exactly 3,
+"days":[{"day":string,"tag":string,"breakfast":string,"lunch":string,"dinner":string,"snack":string}] exactly 7,
+"portionGuide":string,
+"swaps":[{"avoid":string,"instead":string,"keep":string}] 4 to 5,
+"eatingOut":string}`,{modelTier:"default",maxTokens:5000})}catch(e){console.warn("meal plan A",e)}
+  if(!A||!A.days||!A.days.length)return null;
+  try{B=await s.json(`${rules}
+
+${ctx}
+
+THE WEEK YOU ALREADY WROTE
+${A.days.map(d=>`${d.day}: breakfast ${d.breakfast} | lunch ${d.lunch} | dinner ${d.dinner} | snack ${d.snack}`).join("\n")}
+
+Now write the second half: the recipes, the shopping list and the prep block, all consistent with that week. "recipes" are six that cover several meals between them; "meta" like "2 servings · 30 minutes"; "use" is the ingredient line and "make" the method in two or three sentences. The shopping list must cover the week for one adult with intentional leftovers, and contain no allergen.
+
+Reply with only JSON:
+{"recipes":[{"name":string,"meta":string,"use":string,"make":string}] exactly 6,
+"batchNote":string,
+"shopping":{"produce":[string],"proteins":[string],"pantry":[string]},
+"labelNote":string,
+"prep":[{"title":string,"body":string}] exactly 6,
+"medsNote":string,
+"adjustments":[{"title":string,"body":string}] exactly 2,
+"sources":[{"title":string,"note":string}] 3 to 5}`,{modelTier:"default",maxTokens:5000})}catch(e){console.warn("meal plan B",e)}
+  const fb=mpFallback();
+  return{...fb,...A,...(B&&B.recipes&&B.recipes.length?B:{})}}
 /* ---- offline fallback: a real plan, assembled from the member's own flags ---- */
 function mpFallback(){
   const fl=mpFlags(),nm=S.name||"you";const has=a=>fl.allerg.includes(a);

@@ -121,7 +121,7 @@ async function aiCall(req, res) {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": AI_KEY, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model: AI_MODELS[body.tier] || AI_MODELS.default, max_tokens: 1500, system: AI_SYSTEM, messages: merged }),
+      body: JSON.stringify({ model: AI_MODELS[body.tier] || AI_MODELS.default, max_tokens: Math.min(8000, Math.max(256, Number(body.max_tokens) || 1500)), system: AI_SYSTEM, messages: merged }),
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { console.error("Claude API error", r.status, j.error && j.error.type); return send(res, r.status === 429 ? 429 : 502, { error: r.status === 429 ? "rate_limited" : "upstream" }); }
