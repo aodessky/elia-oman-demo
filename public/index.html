@@ -3413,7 +3413,9 @@ RULES
 - Use what they already have at home where it fits, and keep cooking within the time they said they have.
 - Reuse ingredients across the week so one shop covers it, and build in leftovers.
 - Never change, start or stop a medicine. Where the record lists medicines that interact with food, say to confirm with their clinician or pharmacist rather than giving a number.
-- Write in ${LANG_NAME[S.lang]==="Modern Standard Arabic"?"English (the document is typeset in a Latin font)":LANG_NAME[S.lang]}. Plain language, no markdown, no emoji. Never invent labs or conditions that are not given.`;
+- Write in ${LANG_NAME[S.lang]==="Modern Standard Arabic"?"English (the document is typeset in a Latin font)":LANG_NAME[S.lang]}. Plain language, no markdown, no emoji. Never invent labs or conditions that are not given.
+- This is typeset into a fixed page layout, so keep to these lengths: title at most 6 words; subtitle at most 30 words; personalized at most 60 words; each priority body at most 40 words; clinicalNote at most 45 words; each meal line at most 22 words; portionGuide, eatingOut, batchNote, labelNote and medsNote at most 45 words each; each recipe "use" at most 35 words and "make" at most 45 words; each prep body at most 28 words; each adjustment body at most 45 words; shopping entries 2 to 4 words each, at most 18 produce, 8 proteins and 14 pantry.
+- Use plain straight text inside JSON strings: no double quotes, no line breaks, no backslashes.`;
   let A=null,B=null;
   try{A=await s.json(`${rules}
 
@@ -3430,7 +3432,7 @@ Reply with only JSON:
 "days":[{"day":string,"tag":string,"breakfast":string,"lunch":string,"dinner":string,"snack":string}] exactly 7,
 "portionGuide":string,
 "swaps":[{"avoid":string,"instead":string,"keep":string}] 4 to 5,
-"eatingOut":string}`,{modelTier:"default",maxTokens:5000})}catch(e){console.warn("meal plan A",e)}
+"eatingOut":string}`,{modelTier:"default",maxTokens:16000})}catch(e){console.warn("meal plan A",e)}
   if(!A||!A.days||!A.days.length)return null;
   try{B=await s.json(`${rules}
 
@@ -3449,7 +3451,7 @@ Reply with only JSON:
 "prep":[{"title":string,"body":string}] exactly 6,
 "medsNote":string,
 "adjustments":[{"title":string,"body":string}] exactly 2,
-"sources":[{"title":string,"note":string}] 3 to 5}`,{modelTier:"default",maxTokens:5000})}catch(e){console.warn("meal plan B",e)}
+"sources":[{"title":string,"note":string}] 3 to 5}`,{modelTier:"default",maxTokens:16000})}catch(e){console.warn("meal plan B",e)}
   const fb=mpFallback();
   return{...fb,...A,...(B&&B.recipes&&B.recipes.length?B:{})}}
 /* ---- offline fallback: a real plan, assembled from the member's own flags ---- */
