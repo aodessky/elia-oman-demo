@@ -3483,7 +3483,7 @@ function mpFallback(){
   const pri=[];
   if(fl.htn)pri.push({title:"Blood pressure first",body:"Your record points to raised blood pressure. Build meals from minimally processed foods and compare sodium across breads, sauces, canned foods and restaurant meals."});
   if(fl.diab)pri.push({title:"Steadier carbohydrates",body:"Pair every carbohydrate with protein, fat or fibre, keep portions of rice, bread and pasta to about a quarter of the plate, and keep sweet drinks out of the week."});
-  if(fl.lipid)pri.push({title:"Fibre and fats that help",body:"Oats, beans, lentils, fruit and vegetables bring soluble fibre. Use olive oil, nuts and seeds in place of butter, cream and processed meat."});
+  if(fl.lipid)pri.push({title:"Fibre and fats that help",body:`Oats, beans, lentils, fruit and vegetables bring soluble fibre. Use olive oil ${has("nuts")?"and seeds":", nuts and seeds"} in place of butter, cream and processed meat.`});
   if(fl.weight)pri.push({title:"Moderate, satisfying portions",body:"Vegetables, fibre and lean protein at each meal keep fullness up. Snacks are planned rather than automatic. Adjust portions to hunger and your clinician's goals."});
   if(fl.reflux)pri.push({title:"Reflux-aware timing",body:"Keep dinner moderate and finish at least three hours before lying down. Treat citrus, tomato, garlic, caffeine, chocolate, mint and spicy or high-fat meals as optional, not banned."});
   const filler=[{title:"Protein at every meal",body:"Spreading protein across the day protects muscle and steadies appetite far better than one large evening portion."},
@@ -3517,7 +3517,7 @@ function mpFallback(){
      {avoid:"A reflux trigger",instead:"A tolerated non-acidic option",keep:"Portions moderate"}],
    eatingOut:"Ask for sauce and dressing on the side, skip cured meats, choose grilled or baked protein, and make vegetables the largest part of the plate. For reflux, avoid a large late dinner and swap only the triggers that actually bother you.",
    recipes:[
-    {name:"Cinnamon fruit oats",meta:"1 serving · 10 minutes",use:`1/2 cup dry oats, 1 cup water or unsweetened milk, 1/2 banana, 1/2 pear, 1 Tbsp ${nut}, cinnamon.`,make:"Simmer the oats, then top with the fruit, nuts and cinnamon. Add yogurt if you want it creamier."},
+    {name:"Cinnamon fruit oats",meta:"1 serving · 10 minutes",use:`1/2 cup dry oats, 1 cup water or unsweetened milk, 1/2 banana, 1/2 pear, 1 Tbsp ${nut}, cinnamon.`,make:`Simmer the oats, then top with the fruit, ${nut} and cinnamon. Add yogurt if you want it creamier.`},
     {name:"Overnight apple oats",meta:"1 serving · 5 minutes plus chilling",use:`1/2 cup oats, 1/2 cup ${dairy}, 1/2 cup milk or water, 1/2 chopped apple, 1 tsp chia, cinnamon.`,make:"Stir everything together in a jar and refrigerate overnight. Eat cold or warmed."},
     {name:"Lentil-quinoa crunch bowl",meta:"2 servings · 15 minutes after prep",use:"1 cup cooked lentils, 1 cup cooked quinoa, 2 cups greens, chopped cucumber and carrot, 1/2 avocado, olive oil, pepper.",make:"Divide into bowls. Whisk yogurt, dill, oil and a splash of water, and spoon it over just before eating."},
     {name:`Herb-baked ${fish} plate`,meta:"2 servings · 30 minutes",use:`${fish==="salmon"?"Two 4-5 oz salmon fillets":"2 cups cooked white beans"}, 1 large sweet potato, 4 cups broccoli, 2 tsp olive oil, herbs, pepper.`,make:"Roast the sweet potato at 425°F until tender. Add the broccoli and protein for the final 12 to 15 minutes and finish with fresh herbs."},
@@ -3583,7 +3583,10 @@ function mpRender(P){
     [t("mp_sw1"),t("mp_sw2"),t("mp_sw3")].forEach((h,i)=>d.text(h.toUpperCase(),PDF_M+cw.slice(0,i).reduce((a,b)=>a+b,0),d.y,"F2",7.8,C_MUTE,{ls:0.8}));
     d.y+=8;
     P.swaps.slice(0,5).forEach(s=>{d.line(PDF_M,d.y,PDF_W-PDF_M,d.y,C_LINE,0.6);d.y+=13;
-      [s.avoid,s.instead,s.keep].forEach((v,i)=>d.text(v,PDF_M+cw.slice(0,i).reduce((a,b)=>a+b,0),d.y,"F1",9.4,C_BODY));d.y+=9});
+      const cells=[s.avoid,s.instead,s.keep].map((v,i)=>pdfWrap(String(v==null?"":v),"F1",9.4,cw[i]-12).slice(0,2));
+      const rows=Math.max.apply(null,cells.map(c=>c.length));
+      cells.forEach((lines,i)=>{const x=PDF_M+cw.slice(0,i).reduce((a,b)=>a+b,0);lines.forEach((ln,j)=>d.text(ln,x,d.y+j*11,"F1",9.4,C_BODY))});
+      d.y+=9+(rows-1)*11});
     d.line(PDF_M,d.y,PDF_W-PDF_M,d.y,C_LINE,0.6);d.y+=14}
   if(P.eatingOut)mpCallout(d,t("mp_eatout"),P.eatingOut,"peach");
   mpFooter(d,t("mp_f_week"),4);
@@ -3605,10 +3608,10 @@ function mpRender(P){
       d.y=Math.max(y1,y2)+12}
     return pageNo};
   const recs=P.recipes||[];
-  recipePage(recs.slice(0,3),t("mp_core"),t("mp_h_core"));
+  recipePage(recs.slice(0,4),t("mp_core"),t("mp_h_core"));
   if(P.batchNote)mpCallout(d,t("mp_batch"),P.batchNote,"green");
   mpFooter(d,t("mp_f_recipes"),5);
-  if(recs.length>3){recipePage(recs.slice(3),t("mp_dinners"),t("mp_h_dinners"));mpFooter(d,t("mp_f_recipes"),6)}
+  if(recs.length>4){recipePage(recs.slice(4),t("mp_dinners"),t("mp_h_dinners"));mpFooter(d,t("mp_f_recipes"),6)}
   /* 7 — shopping */
   d.add();mpEyebrow(d,t("mp_shop"));mpH2(d,t("mp_h_shop"));d.y+=10;
   const sh=P.shopping||{produce:[],proteins:[],pantry:[]};
@@ -3627,8 +3630,8 @@ function mpRender(P){
   d.rect(PDF_M,top,cwid,boxH,C_LINE);d.rect(PDF_M+cwid+28,top,cwid,boxH,C_LINE);
   d.y=top+boxH+18;
   if(P.labelNote)mpCallout(d,t("mp_labels"),P.labelNote,"green");
-  mpBody(d,t("mp_shop_note"),8.4,C_MUTE);
-  mpFooter(d,t("mp_f_shop"),recs.length>3?7:6);
+  mpBody(d,(S.house>1?t("mp_shop_note_n",{n:S.house}):t("mp_shop_note")),8.4,C_MUTE);
+  mpFooter(d,t("mp_f_shop"),recs.length>4?7:6);
   /* 8 — prep, adjustments, sources */
   d.add();mpEyebrow(d,t("mp_prep"));mpH2(d,t("mp_h_prep"));d.y+=12;
   (P.prep||[]).forEach((s,i)=>{d.circle(PDF_M+8,d.y-3,8.5,[0.710,0.329,0.169]);
@@ -3649,7 +3652,7 @@ function mpRender(P){
       const L=pdfWrap(lead+" — "+(s.note||""),"F1",8.8,PDF_CW-12);
       L.forEach(ln=>{d.text(ln,PDF_M+11,d.y,"F1",8.8,C_BODY);d.y+=11.6});d.y+=2})}
   d.y+=6;mpBody(d,t("mp_disclaimer"),8,C_MUTE);
-  mpFooter(d,foot,recs.length>3?8:7);
+  mpFooter(d,foot,recs.length>4?8:7);
   return d.build()}
 /* ---- flow ---- */
 function mpOffer(next){S.mpNext=next||null;
@@ -3724,7 +3727,7 @@ Object.assign(L.en,{mp_btn:"Plan my meals long term",p_mealplan:"Build a meal pl
  mp_core:"Core recipes",mp_h_core:"A few anchors cover several meals",mp_dinners:"Dinner recipes",mp_h_dinners:"Simple seasoning keeps sodium optional",
  mp_use:"Use:",mp_make:"Make:",mp_batch:"Batch note:",mp_f_recipes:"Recipes",
  mp_shop:"Shopping list",mp_h_shop:"Buy once, then let ingredients repeat",mp_produce:"Produce",mp_proteins:"Proteins and dairy",mp_pantry:"Grains and pantry",
- mp_labels:"Label priorities:",mp_shop_note:"Quantities assume one adult, with several intentional leftover portions. Adjust for appetite, household size and food waste.",mp_f_shop:"Shopping list",
+ mp_labels:"Label priorities:",mp_shop_note:"Quantities assume one adult, with several intentional leftover portions. Adjust for appetite, household size and food waste.",mp_shop_note_n:"Quantities assume {n} people eating together, with several intentional leftover portions. Adjust for appetite and food waste.",mp_f_shop:"Shopping list",
  mp_prep:"Prep and personalisation",mp_h_prep:"A 75-minute setup makes the week easier",mp_meds:"Use this as a food plan, not a treatment change:",
  mp_h_adjust:"Your built-in adjustments",mp_h_sources:"Sources",
  mp_disclaimer:"Written by ELIA from the information in your Prime Health profile and any connected health record. Recipe sodium is not calculated because brands and portions vary; use Nutrition Facts labels for precise totals. Review this plan with your clinician or a registered dietitian before making changes alongside treatment."});
@@ -3748,7 +3751,7 @@ Object.assign(L.es,{mp_btn:"Planear mis comidas a largo plazo",p_mealplan:"Crear
  mp_core:"Recetas base",mp_h_core:"Unas cuantas bases cubren varias comidas",mp_dinners:"Recetas de cena",mp_h_dinners:"Sazonar simple mantiene el sodio opcional",
  mp_use:"Usa:",mp_make:"Prepara:",mp_batch:"Nota de preparación:",mp_f_recipes:"Recetas",
  mp_shop:"Lista de compras",mp_h_shop:"Compra una vez y deja que los ingredientes se repitan",mp_produce:"Frutas y verduras",mp_proteins:"Proteínas y lácteos",mp_pantry:"Granos y despensa",
- mp_labels:"Prioridades de etiqueta:",mp_shop_note:"Las cantidades asumen un adulto, con varias porciones de sobra intencionales. Ajusta según apetito, tamaño del hogar y desperdicio.",mp_f_shop:"Lista de compras",
+ mp_labels:"Prioridades de etiqueta:",mp_shop_note:"Las cantidades asumen un adulto, con varias porciones de sobra intencionales. Ajusta según apetito, tamaño del hogar y desperdicio.",mp_shop_note_n:"Las cantidades asumen {n} personas comiendo juntas, con varias porciones de sobra intencionales. Ajusta según apetito y desperdicio.",mp_f_shop:"Lista de compras",
  mp_prep:"Preparación y personalización",mp_h_prep:"Un montaje de 75 minutos facilita la semana",mp_meds:"Úsalo como plan de alimentación, no como cambio de tratamiento:",
  mp_h_adjust:"Tus ajustes incorporados",mp_h_sources:"Fuentes",
  mp_disclaimer:"Escrito por ELIA a partir de tu perfil de Prime Health y de cualquier historial conectado. El sodio de las recetas no está calculado porque marcas y porciones varían; usa las etiquetas nutricionales para totales precisos. Revisa este plan con tu médico o un dietista registrado antes de hacer cambios junto a un tratamiento."});
@@ -3772,7 +3775,7 @@ Object.assign(L.ar,{mp_btn:"خطة وجبات طويلة المدى",p_mealplan:
  mp_core:"الوصفات الأساسية",mp_h_core:"وصفات قليلة تغطي وجبات عدة",mp_dinners:"وصفات العشاء",mp_h_dinners:"التتبيل البسيط يبقي الصوديوم اختياريًا",
  mp_use:"المكونات:",mp_make:"الطريقة:",mp_batch:"ملاحظة التحضير:",mp_f_recipes:"الوصفات",
  mp_shop:"قائمة التسوق",mp_h_shop:"تسوّق مرة واحدة ودع المكونات تتكرر",mp_produce:"الخضار والفواكه",mp_proteins:"البروتينات والألبان",mp_pantry:"الحبوب والمؤن",
- mp_labels:"أولويات الملصق:",mp_shop_note:"الكميات مقدّرة لشخص بالغ واحد مع حصص فائضة مقصودة. عدّلها حسب الشهية وحجم الأسرة وهدر الطعام.",mp_f_shop:"قائمة التسوق",
+ mp_labels:"أولويات الملصق:",mp_shop_note:"الكميات مقدّرة لشخص بالغ واحد مع حصص فائضة مقصودة. عدّلها حسب الشهية وحجم الأسرة وهدر الطعام.",mp_shop_note_n:"الكميات مقدّرة لـ {n} أفراد يأكلون معًا، مع حصص فائضة مقصودة. عدّلها حسب الشهية وهدر الطعام.",mp_f_shop:"قائمة التسوق",
  mp_prep:"التحضير والتخصيص",mp_h_prep:"إعداد من 75 دقيقة يسهّل الأسبوع",mp_meds:"استخدمها كخطة طعام لا كتغيير للعلاج:",
  mp_h_adjust:"تعديلاتك المدمجة",mp_h_sources:"المصادر",
  mp_disclaimer:"كتبتها ELIA من معلومات ملفك في Prime Health ومن أي سجل صحي متصل. لم يُحتسب الصوديوم في الوصفات لأن العلامات التجارية والحصص تختلف؛ استخدم ملصقات القيم الغذائية للحصول على مجاميع دقيقة. راجع هذه الخطة مع طبيبك أو أخصائي تغذية مسجل قبل إجراء تغييرات مع العلاج."});
