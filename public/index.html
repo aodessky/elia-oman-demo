@@ -825,6 +825,7 @@ li.wc-scope{cursor:default}
     <button id="pRec" data-t="p_rec">Connect health records</button>
     <button id="pTri" data-t="p_tri">Check a symptom</button>
     <button id="pMealPlan" data-t="p_mealplan">Build a meal plan</button>
+    <button id="pOnboard" data-t="p_onboard">Onboard my plan</button>
     <button id="pSleep" data-t="p_sleep">Start a sleep goal</button>
     <button id="pMove" data-t="p_move">Start a movement goal</button>
     <button id="pDiet" data-t="p_diet">Start a diet goal</button>
@@ -2460,6 +2461,9 @@ async function vmDuplexTurn(text){if(!VM.on||!text)return"";
   if(/^(?:stop|end voice( mode)?|exit voice mode|goodbye|termina(r)?( modo de voz)?|adios|أنهِ|انهاء|إنهاء)$/i.test(vmNorm(text))){setTimeout(vmClose,800);return t("vm_bye")}
   /* Voice is a health Q&A with ELIA: it never runs the onboarding or scoring flow. Emergencies get the safety line first. */
   if(SAFE_RE.test(text)||(typeof simEmergency==="function"&&simEmergency(text)))return t("vm_emerg_line",{num:t("emerg_val")});
+  /* the one flow voice can start: onboarding onto a plan, which then runs in the chat */
+  if(OB_RE.test(text)&&!S.ob){obStart();return t("ob_voice_start")}
+  if(S.ob&&(obActive()||obTopic(text)))return obVoice(text);
   return voiceAnswer(text)}
 /* A spoken answer: short, conversational, from the member's data when it applies, otherwise Claude's general guidance. Keeps a short memory of the call. */
 async function voiceAnswer(q){VM.hist=VM.hist||[];const s=sampleOff?null:await getSample();if(!s)return t("vm_noai");
@@ -2597,7 +2601,7 @@ document.getElementById("btnVM").onclick=()=>vmOpen();
 /* ============ State ============ */
 const TZ=(()=>{try{return Intl.DateTimeFormat().resolvedOptions().timeZone}catch(e){return "UTC"}})();
 let S;
-function fresh(){return{lang:S?S.lang:"en",await:null,name:"",goal:null,facts:{},meal:null,scan:null,allergies:[],allergyText:"",injury:null,activity:null,minutes:null,slot:null,house:null,cook:null,plan:null,files:[],updates:[],hqTab:"overview",openAct:null,openFile:null,editing:null,scoreOpen:false,ingredients:null,recipeFile:null,coreDone:false,persona:false,fileQ:"",rx:{turn:0,last:-99,times:[],pref:"on"},care:[],tri:null,sim:null,simPrev:null,record:null,recTurns:[],recQA:[],recTab:"summary",recNoteKind:"all",recOpenNote:null,recAsked:false}}
+function fresh(){return{lang:S?S.lang:"en",await:null,name:"",goal:null,facts:{},meal:null,scan:null,allergies:[],allergyText:"",injury:null,activity:null,minutes:null,slot:null,house:null,cook:null,plan:null,files:[],updates:[],hqTab:"overview",openAct:null,openFile:null,editing:null,scoreOpen:false,ingredients:null,recipeFile:null,coreDone:false,persona:false,fileQ:"",rx:{turn:0,last:-99,times:[],pref:"on"},care:[],tri:null,sim:null,simPrev:null,record:null,recTurns:[],recQA:[],recTab:"summary",recNoteKind:"all",recOpenNote:null,recAsked:false,ob:null,obDoc:null}}
 S=fresh();
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -3780,6 +3784,1025 @@ Object.assign(L.ar,{mp_btn:"خطة وجبات طويلة المدى",p_mealplan:
  mp_h_adjust:"تعديلاتك المدمجة",mp_h_sources:"المصادر",
  mp_disclaimer:"كتبتها ELIA من معلومات ملفك في Prime Health ومن أي سجل صحي متصل. لم يُحتسب الصوديوم في الوصفات لأن العلامات التجارية والحصص تختلف؛ استخدم ملصقات القيم الغذائية للحصول على مجاميع دقيقة. راجع هذه الخطة مع طبيبك أو أخصائي تغذية مسجل قبل إجراء تغييرات مع العلاج."});
 
+/* ============ Plan onboarding (Humana) ============ */
+/* The only ways in: the Quick action, or asking for it in words — typed or spoken. */
+const OB_RE=/\b(onboard(ing|ed)?|enrol(l|ment|lment)?|sign me up|sign up for (my|the|a) (plan|cover|benefits)|apply for (life )?(insurance|cover(age)?)|life insurance (application|quote)|benefits (enrol|enroll|onboard|sign.?up))\b|\bhumana\b|dar(me)? de alta|alta de(l)? (mi )?plan|inscribir(me)?\b|inscripci[oó]n (al|del|en el) plan|afiliar(me)?\b|solicitar (un )?seguro de vida|تسجيل خطتي|سجّل خطتي|سجل خطتي|التسجيل في الخطة|الاشتراك في الخطة|طلب تأمين على الحياة/i;
+const OB_Q_RE=/\b(plan|cover(ed|age|s)?|co-?pay|deductible|premium|network|in.network|out.of.network|part [abd]\b|medicare|drug|pharmac|dental|vision|hearing|specialist|beneficiar|guaranteed issue|evidence of insurability|go365|centerwell|out.of.pocket)\b|p[oó]liza|cobertura|copago|deducible|prima|red|beneficiario|تغطية|وثيقة|شبكة|مستفيد|قسط/i;
+function obTopic(x){return OB_RE.test(x)||OB_Q_RE.test(x)}
+/* Spoken: a reply that matches a chip presses it and ELIA reads back whatever she just said,
+   so the whole journey can be done hands-free; anything else is answered as a plan question. */
+const OB_SAID=["ob_name","ob_dob","ob_zip","ob_amount","ob_bene"];
+/* a step can queue more messages while the last one is still going out, so settle more than once */
+async function obSettle(){for(let i=0;i<4;i++){try{await chain}catch(e){}await new Promise(r=>setTimeout(r,180))}}
+async function obVoice(q){
+  /* let whatever ELIA is mid-way through saying finish, so the chips exist to match against */
+  await obSettle();
+  try{const b=S.await?strictMatch(q):vmMatchReply(q);
+    if(b){b.click();await obSettle();return obLastSpoken()}}catch(e){}
+  /* a spoken answer to a question that takes words rather than a tap: a name, a date, a ZIP, an amount */
+  if(OB_SAID.includes(S.await)&&!obTopic(q)){
+    try{const i=$("#inp");i.value=q;$("#composer").requestSubmit()}catch(e){}
+    await obSettle();return obLastSpoken()}
+  const s=sampleOff?null:await getSample();
+  if(!s)return obFallback(q);
+  try{const r=await s(`You are ELIA, Prime Health's health companion, on a voice call with a member who is part-way through onboarding onto a Humana plan. Answer their question about the plan as natural speech: warm, plain, one to three short sentences, no lists, no markdown, no emoji. Answer in ${LANG_NAME[S.lang]}. Amounts in US dollars.
+Use ONLY the plan information below. If it does not settle the question, say so and point them to Humana member services. Never invent a benefit or a figure, never give medical advice, never promise an approval. End by inviting them back to the question on screen.
+${obContext()}
+The member said: """${q}"""`,{modelTier:"default",cache:false});
+    const a=(r&&r.text||"").replace(/\*\*/g,"").replace(/\s+/g," ").trim();return a||obFallback(q)}
+  catch(e){return obFallback(q)}}
+function obLastSpoken(){const list=[...msgsEl.querySelectorAll(".msg:not(.me):not(.sys):not(.sim):not(.typing)")];
+  for(let i=list.length-1;i>=0;i--){let txt=(list[i].innerText||"").replace(/\s+/g," ").trim();
+    txt=txt.replace(/\s*\d{1,2}:\d{2}(\s?[AaPp]\.?[Mm]\.?)?$/,"").trim();
+    if(txt&&txt.length>2)return txt}
+  return t("ob_voice_ok")}
+/* ============ Plan onboarding (Humana) ============
+   A separate journey. It is never reached from the main flow: only from Quick
+   actions, or by asking ELIA (typed or spoken) to onboard a plan.
+   Two things happen in one sitting: enrolling onto a Humana health plan, and
+   applying for Humana voluntary term life. One health risk assessment feeds both.
+   Every figure below is from Humana's published plan materials; the schedule is
+   presented as a demo and the documents it produces are clearly marked as samples. */
+const HUM={
+  carrier:"Humana",
+  health:{name:"HumanaChoice R5826-074 (Regional PPO)",short:"HumanaChoice Regional PPO",id:"R5826-074",
+    kind:"Medicare Advantage Regional PPO with Part D",year:2027,
+    premium:35,moop:7550,pcp:0,spec:50,er:115,urgent:15,
+    inpDay:625,inpDays:3,snfFree:20,snfDay:160,
+    rxDed:700,rxCoins:25,rxCap:2100,
+    aidLow:499,aidHigh:725,
+    phone:"1-800-706-1368",tty:"711"},
+  life:{name:"Humana Voluntary Term Life",min:15000,step:1000,max:250000,gi:50000,
+    adbMax:800000,comaPct:5,comaMax:5000,repat:5000,waiverMonths:6,waiverAge:60,
+    portAge:70,reduceAge:65,incOption:25000,spousePct:50,spouseMin:5000,childHigh:10000},
+  rates:[[0,29,0.05],[30,39,0.07],[40,44,0.10],[45,49,0.15],[50,54,0.25],[55,59,0.42],[60,64,0.70],[65,69,1.15],[70,120,1.90]],
+  tobaccoFactor:2.1};
+const OB_STEPS=12;
+const usd=n=>"$"+Math.round(Number(n)||0).toLocaleString("en-US");
+const usd2=n=>"$"+(Math.round(Number(n)*100)/100).toFixed(2);
+function obRate(age,tob){const r=(HUM.rates.find(b=>age>=b[0]&&age<=b[1])||HUM.rates[HUM.rates.length-1])[2];return r*(tob?HUM.tobaccoFactor:1)}
+function obPremium(amount,age,tob){return Math.round((amount/1000)*obRate(age,tob)*100)/100}
+function obEffective(){const d=new Date(2026,10,9);const e=new Date(d.getFullYear(),d.getMonth()+1,1);return e}
+function obFmtDate(d,lang){return d.toLocaleDateString(LOCALE[lang||S.lang],{year:"numeric",month:"long",day:"numeric"})}
+/* Arabic has no glyphs in the base-14 PDF fonts, so the document falls back to English and says so */
+function obPdfLang(){return S.lang==="ar"?"en":S.lang}
+
+/* ---- state ---- */
+function obNew(){return{step:0,d:{},h:{},flags:[],progs:[],decision:null,pend:null,done:false,asked:0}}
+function obActive(){return !!(S.ob&&!S.ob.done)}
+function obAge(){return S.ob&&S.ob.d.age||null}
+
+/* ---- step scaffolding: every question can be interrupted with a question about the plan ---- */
+function obQ(q,chips,o={}){
+  if(!S.ob)S.ob=obNew();
+  S.ob.pend=()=>obQ(q,chips,o);
+  const head=o.n?`<p class="note" style="margin:0 0 4px">${t("ob_step",{n:o.n,of:OB_STEPS})}</p>`:"";
+  bot(head+`<p style="margin:0">${q}</p>`,o.bot||{});
+  run(()=>{S.await=o.await?"ob_"+o.await:null});
+  const list=chips.map(c=>[c[0],()=>{S.await=null;clearReplies();c[1]()},c[2]||{}]);
+  if(!o.noAsk)list.push([t("ob_ask_btn"),()=>obAskStart(),{silent:true}]);
+  replies(list)}
+function obResume(){if(!obActive()||!S.ob.pend)return false;const f=S.ob.pend;bot(t("ob_back"),{delay:260});later(f);return true}
+
+/* ---- 1. the offer ---- */
+function obStart(){
+  setView("chat");gen++;chain=Promise.resolve();clearReplies();S.await=null;S.curReplies=null;
+  /* started cold from Quick actions: bring in the example member and their record, so the
+     assessment can show what it already knows instead of asking for it twice */
+  if(!S.name){loadPersona();S.langChosen=true;if(!S.record)S.record=recMakeRecord();renderHQ()}
+  S.ob=obNew();
+  bot(t("ob_intro",{name:esc(S.name||t("hq_member"))}));
+  bot(t("ob_intro2"));
+  obQ(t("ob_consent_q"),[
+    [t("ob_consent_yes"),()=>{S.ob.step=1;obName()},{react:"goals"}],
+    [t("ob_what_btn"),()=>obAnswer(t("ob_what_q"))],
+    [t("ob_not_now"),()=>{S.ob=null;bot(t("ob_later"));if(S.coreDone)coreReplies()}]],{noAsk:true})}
+
+/* ---- 2. demographics ---- */
+function obName(){const n=S.name||"";
+  obQ(t("ob_q_name"),n?[[t("ob_use_name",{name:esc(n)}),()=>{S.ob.d.name=n;obDob()}]]:[],{await:"name",n:1})}
+function obOnName(x){const v=String(x||"").replace(/^(?:my name is|my name's|i am|i'm|im|it's|its|call me|me llamo|soy|اسمي)\s+/i,"").replace(/[.!]+$/,"").trim();
+  if(!v){obResume();return}S.ob.d.name=v.split(/\s+/).slice(0,4).join(" ").slice(0,48);S.await=null;clearReplies();obDob()}
+function obDob(){obQ(t("ob_q_dob"),[[t("ob_dob_eg"),()=>obSetDob(1959,3,14)]],{await:"dob",n:2})}
+/* spoken numbers: "nineteen fifty nine", "fifty thousand" — voice gives words, not digits */
+const OB_NUM={zero:0,oh:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,
+ thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,eighteen:18,nineteen:19,twenty:20,thirty:30,forty:40,
+ fifty:50,sixty:60,seventy:70,eighty:80,ninety:90,hundred:100};
+function obWords(x){return String(x).toLowerCase().replace(/[-,]/g," ").split(/\s+/).map(w=>OB_NUM[w]).filter(n=>n!=null)}
+function obWordYear(x){const w=obWords(x);
+  for(let i=0;i<w.length;i++){if(w[i]!==19&&w[i]!==20)continue;
+    let rest=0;
+    if(w[i+1]!=null&&w[i+1]>=20&&w[i+1]<100)rest=w[i+1]+((w[i+2]!=null&&w[i+2]<10)?w[i+2]:0);
+    else if(w[i+1]===0&&w[i+2]!=null&&w[i+2]<10)rest=w[i+2];
+    else if(w[i+1]!=null&&w[i+1]<20)rest=w[i+1];
+    const y=w[i]*100+rest;if(y>=1900&&y<=2015)return y}
+  return null}
+function obWordAmount(x){const s=String(x).toLowerCase();if(!/thousand|\d\s*k\b/.test(s))return null;
+  const d=s.replace(/[,\s]/g,"").match(/(\d+)\s*k\b/);if(d)return +d[1]*1000;
+  const d2=s.match(/(\d+)\s*thousand/);if(d2)return +d2[1]*1000;
+  const w=obWords(s.split(/thousand/)[0]);if(!w.length)return null;
+  let n=0,cur=0;for(const v of w){if(v===100)cur=(cur||1)*100;else if(v>=20)cur+=v;else cur+=v}
+  n=cur;return n>0?n*1000:null}
+function obOnDob(x){const s=String(x||"");const ym=s.match(/\b(19[0-9]{2}|20[0-1][0-9])\b/);
+  const wy=ym?null:obWordYear(s);
+  if(!ym&&!wy){bot(t("ob_dob_again"));obResume();return}
+  const y=ym?+ym[1]:wy;let mo=0,da=1;
+  const iso=s.match(/\b(19\d{2}|20[0-1]\d)[-/](\d{1,2})[-/](\d{1,2})\b/);
+  const dmy=s.match(/\b(\d{1,2})[-/](\d{1,2})[-/](19\d{2}|20[0-1]\d)\b/);
+  const MON=["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+  const nm=s.toLowerCase().match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/);
+  if(iso){mo=+iso[2];da=+iso[3]}else if(dmy){da=+dmy[1];mo=+dmy[2]}else if(nm){mo=MON.indexOf(nm[1])+1;const dd=s.match(/\b(\d{1,2})\b(?!\d)/);if(dd)da=+dd[1]}
+  S.await=null;clearReplies();obSetDob(y,mo||1,da||1)}
+function obSetDob(y,m,d){
+  const today=new Date(2026,10,9);let age=today.getFullYear()-y;
+  if(m&&(m-1>today.getMonth()||(m-1===today.getMonth()&&d>today.getDate())))age--;
+  if(age<18||age>110){bot(t("ob_dob_again"));obResume();return}
+  S.ob.d.dobY=y;S.ob.d.dobM=m;S.ob.d.dobD=d;S.ob.d.age=age;
+  S.ob.d.dobText=new Date(y,(m||1)-1,d||1).toLocaleDateString(LOCALE[S.lang],{year:"numeric",month:"long",day:"numeric"});
+  S.ob.elig=age>=65;
+  if(S.ob.elig){bot(t("ob_dob_ok",{age}));obMedicare()}
+  else{bot(t("ob_under65",{age,plan:HUM.health.short}));
+    obQ(t("ob_under65_q"),[
+      [t("ob_under65_yes"),()=>{S.ob.d.medicare="n/a";obZip()},{react:"goals"}],
+      [t("ob_under65_no"),()=>{bot(t("ob_later"));S.ob=null;if(S.coreDone)coreReplies()}]],{noAsk:false})}}
+function obMedicare(){obQ(t("ob_q_medicare"),[
+  [t("ob_med_both"),()=>{S.ob.d.medicare="ab";obZip()}],
+  [t("ob_med_a"),()=>{S.ob.d.medicare="a";bot(t("ob_med_a_note"));obZip()}],
+  [t("ob_med_no"),()=>{S.ob.d.medicare="no";bot(t("ob_med_no_note"));obZip()}]],{n:3})}
+function obZip(){obQ(t("ob_q_zip"),[[t("ob_zip_eg"),()=>obSetZip("45202")]],{await:"zip",n:4})}
+function obOnZip(x){const m=String(x||"").match(/\b(\d{5})\b/);if(!m){bot(t("ob_zip_again"));obResume();return}S.await=null;clearReplies();obSetZip(m[1])}
+function obSetZip(z){S.ob.d.zip=z;bot(t("ob_zip_ok",{zip:z,plan:HUM.health.short}));obSex()}
+function obSex(){const f=S.facts.sex&&S.facts.sex.val&&S.facts.sex.val.k;
+  obQ(t("ob_q_sex")+(f?" "+t("ob_prefill"):""),[
+    [t("sex_f"),()=>{S.ob.d.sex="f";obTobacco()}],
+    [t("sex_m"),()=>{S.ob.d.sex="m";obTobacco()}],
+    [t("ob_skip"),()=>{S.ob.d.sex=null;obTobacco()}]],{n:5})}
+function obTobacco(){obQ(t("ob_q_tobacco"),[
+  [t("ob_tob_no"),()=>{S.ob.d.tobacco=false;obAmount()}],
+  [t("ob_tob_quit"),()=>{S.ob.d.tobacco=false;S.ob.d.quit=true;obAmount()}],
+  [t("ob_tob_yes"),()=>{S.ob.d.tobacco=true;obAmount()}]],{n:6})}
+function obAmount(){const L=HUM.life,a=obAge()||50;
+  const opts=[25000,50000,100000,150000];
+  bot(t("ob_amount_lead",{min:usd(L.min),gi:usd(L.gi),max:usd(L.max)}));
+  obQ(t("ob_q_amount"),opts.map(v=>[`${usd(v)} · ${usd2(obPremium(v,a,S.ob.d.tobacco))}${t("ob_per_month")}`,()=>obSetAmount(v)])
+    .concat([[t("ob_amount_other"),()=>{obQ(t("ob_q_amount_other",{min:usd(L.min),max:usd(L.max)}),[],{await:"amount",n:7})}]]),{n:7})}
+function obOnAmount(x){const w=obWordAmount(x);const m=w?null:String(x||"").replace(/[,\s]/g,"").match(/(\d{3,7})/);
+  if(!w&&!m){obResume();return}
+  let v=Math.round((w||+m[1])/HUM.life.step)*HUM.life.step;
+  v=Math.max(HUM.life.min,Math.min(HUM.life.max,v));S.await=null;clearReplies();obSetAmount(v)}
+function obSetAmount(v){S.ob.d.amount=v;S.ob.d.premium=obPremium(v,obAge()||50,S.ob.d.tobacco);
+  bot(t("ob_amount_ok",{amt:usd(v),prem:usd2(S.ob.d.premium)}));
+  if(v>HUM.life.gi)bot(t("ob_amount_eoi",{gi:usd(HUM.life.gi)}));
+  obBene()}
+function obBene(){obQ(t("ob_q_bene"),[[t("ob_bene_eg"),()=>obSetBene(t("ob_bene_eg_val"))]],{await:"bene",n:8})}
+function obOnBene(x){const v=String(x||"").trim();if(!v){obResume();return}S.await=null;clearReplies();obSetBene(v.slice(0,60))}
+function obSetBene(v){S.ob.d.bene=v;
+  obQ(t("ob_q_rel",{who:esc(v)}),[["ob_rel_spouse"],["ob_rel_child"],["ob_rel_parent"],["ob_rel_other"]]
+    .map(([k])=>[t(k),()=>{S.ob.d.rel=t(k);obHraIntro()}]),{n:9})}
+
+/* ---- 3. health risk assessment ---- */
+const OB_COND=[["diabetes",/diabet|a1c|metformin/i],["bp",/hypertens|blood pressure|lisinopril|amlodipine/i],
+  ["chol",/cholesterol|lipid|statin|atorvastatin/i],["heart",/heart (failure|disease)|coronary|angina|afib/i],
+  ["lung",/asthma|copd|emphysema/i],["joint",/arthrit|osteoarthr|joint pain/i],
+  ["kidney",/kidney|renal|ckd/i],["mood",/depress|anxiety/i]];
+function obRecConds(){if(!S.record)return[];let txt="";try{txt=recText(S.record)}catch(e){return[]}
+  return OB_COND.filter(([k,re])=>re.test(txt)).map(([k])=>k)}
+function obHraIntro(){
+  const pre=obRecConds();S.ob.h.cond=pre.slice();
+  bot(t("ob_hra_intro"));
+  if(pre.length)bot(t("ob_hra_pre",{list:listJoin(pre.map(k=>t("ob_c_"+k)))}));
+  obQ(t("ob_hra_go_q"),[[t("ob_hra_go"),()=>obH1(),{react:"goals"}],[t("ob_ask_btn"),()=>obAskStart()]],{noAsk:true})}
+function obH1(){obQ(t("ob_h_health"),[["ob_hs_ex"],["ob_hs_vg"],["ob_hs_good"],["ob_hs_fair"],["ob_hs_poor"]]
+  .map(([k])=>[t(k),()=>{S.ob.h.self=k;obH2()}]),{n:10})}
+function obH2(){obPick("cond",OB_COND.map(([k])=>k),t("ob_h_cond"),t("ob_c_none"),()=>obH3(),10)}
+function obH3(){obQ(t("ob_h_meds"),[["ob_m_0","0"],["ob_m_13","1-3"],["ob_m_47","4-7"],["ob_m_8","8+"]]
+  .map(([k,v])=>[t(k),()=>{S.ob.h.meds=v;S.ob.h.medsK=k;obH3b()}]),{n:10})}
+function obH3b(){obQ(t("ob_h_meds2"),[["ob_never"],["ob_sometimes"],["ob_often"]]
+  .map(([k])=>[t(k),()=>{S.ob.h.medTrouble=k;obH4()}]),{n:10})}
+function obH4(){obQ(t("ob_h_hosp"),[["ob_hp_0","0"],["ob_hp_1","1"],["ob_hp_2","2"],["ob_hp_3","3+"]]
+  .map(([k,v])=>[t(k),()=>{S.ob.h.hosp=v;S.ob.h.hospK=k;obH5()}]),{n:11})}
+function obH5(){obQ(t("ob_h_falls"),[["ob_f_0","0"],["ob_f_1","1"],["ob_f_2","2+"],["ob_f_worry","worry"]]
+  .map(([k,v])=>[t(k),()=>{S.ob.h.falls=v;S.ob.h.fallsK=k;obH6()}]),{n:11})}
+function obH6(){obPick("adl",["bath","dress","meals","around","transport"],t("ob_h_adl"),t("ob_adl_none"),()=>obH7(),11)}
+function obH7(){obQ(t("ob_h_pain"),[["ob_p_none"],["ob_p_mild"],["ob_p_mod"],["ob_p_sev"]]
+  .map(([k])=>[t(k),()=>{S.ob.h.pain=k;obH8()}]),{n:11})}
+function obH8(){obQ(t("ob_h_mood1"),[["ob_phq_0",0],["ob_phq_1",1],["ob_phq_2",2],["ob_phq_3",3]]
+  .map(([k,v])=>[t(k),()=>{S.ob.h.mood1=v;obH9()}]),{n:12})}
+function obH9(){obQ(t("ob_h_mood2"),[["ob_phq_0",0],["ob_phq_1",1],["ob_phq_2",2],["ob_phq_3",3]]
+  .map(([k,v])=>[t(k),()=>{S.ob.h.mood2=v;obMoodCheck()}]),{n:12})}
+function obMoodCheck(){const s=(S.ob.h.mood1||0)+(S.ob.h.mood2||0);S.ob.h.phq=s;
+  if(s>=3){bot(t("ob_mood_care"));bot(t("ob_mood_care2"))}
+  obH10()}
+function obH10(){obQ(t("ob_h_active"),[["ob_a_0","0"],["ob_a_12","1-2"],["ob_a_34","3-4"],["ob_a_5","5+"]]
+  .map(([k,v])=>[t(k),()=>{S.ob.h.active=v;S.ob.h.activeK=k;obH11()}]),{n:12})}
+function obH11(){obQ(t("ob_h_food"),[["ob_never"],["ob_sometimes"],["ob_often"]]
+  .map(([k])=>[t(k),()=>{S.ob.h.food=k;obH12()}]),{n:12})}
+function obH12(){obQ(t("ob_h_ride"),[["ob_r_no"],["ob_r_some"],["ob_r_often"]]
+  .map(([k])=>[t(k),()=>{S.ob.h.ride=k;obH13()}]),{n:12})}
+function obH13(){obPick("prev",["flu","colon","dental","eye"],t("ob_h_prev"),t("ob_prev_none"),()=>obH14(),12)}
+function obH14(){obQ(t("ob_h_support"),[["ob_s_family"],["ob_s_friend"],["ob_s_none"]]
+  .map(([k])=>[t(k),()=>{S.ob.h.support=k;obDecide()}]),{n:12})}
+/* a multi-select built out of the ordinary reply chips: tap to toggle, then Done */
+function obPick(key,keys,q,noneLabel,next,n){
+  if(!S.ob.h[key])S.ob.h[key]=[];
+  const draw=()=>{S.ob.pend=draw;
+    const sel=S.ob.h[key];
+    const head=`<p class="note" style="margin:0 0 4px">${t("ob_step",{n,of:OB_STEPS})}</p>`;
+    bot(head+`<p style="margin:0">${q}</p>`);
+    run(()=>{S.await=null});
+    const list=keys.map(k=>[(sel.includes(k)?"✓ ":"")+t("ob_"+(key==="cond"?"c_":key==="adl"?"adl_":"prev_")+k),()=>{
+      const i=sel.indexOf(k);if(i<0)sel.push(k);else sel.splice(i,1);clearReplies();draw()},{silent:true}]);
+    list.push([noneLabel,()=>{S.ob.h[key]=[];clearReplies();next()},{silent:true}]);
+    if(sel.length)list.push([t("ob_pick_done",{n:sel.length}),()=>{clearReplies();next()}]);
+    list.push([t("ob_ask_btn"),()=>obAskStart(),{silent:true}]);
+    replies(list)};
+  draw()}
+
+/* ---- 4. decision ---- */
+function obDecide(){
+  const H=S.ob.h,D=S.ob.d,flags=[],progs=[];
+  const has=k=>(H.cond||[]).includes(k);
+  if(has("diabetes")||has("bp")||has("chol")||has("heart")||has("kidney"))progs.push("chronic");
+  if(H.falls==="1"||H.falls==="2+"||H.falls==="worry"||(H.adl||[]).length)progs.push("falls");
+  if((H.phq||0)>=3||has("mood"))progs.push("behav");
+  if(H.food==="ob_sometimes"||H.food==="ob_often")progs.push("food");
+  if(H.ride==="ob_r_some"||H.ride==="ob_r_often")progs.push("ride");
+  if(H.active==="0"||H.active==="1-2")progs.push("move");
+  if(H.meds==="4-7"||H.meds==="8+"||H.medTrouble==="ob_sometimes"||H.medTrouble==="ob_often")progs.push("pharm");
+  if((H.prev||[]).length<4)progs.push("prev");
+  if(H.pain==="ob_p_mod"||H.pain==="ob_p_sev")progs.push("pain");
+  if(H.hosp==="2"||H.hosp==="3+")flags.push("hosp");
+  if(D.tobacco)flags.push("tobacco");
+  if((H.cond||[]).length>=4)flags.push("cond");
+  if(H.self==="ob_hs_poor")flags.push("self");
+  const over=D.amount>HUM.life.gi;
+  const refer=over&&flags.length>0;
+  const dec={life:refer?"referred":"approved",
+    issued:refer?HUM.life.gi:D.amount,
+    pending:refer?D.amount-HUM.life.gi:0,
+    premium:obPremium(refer?HUM.life.gi:D.amount,D.age,D.tobacco),
+    eoi:over,flags,progs,
+    health:S.ob.elig&&D.medicare!=="no"?"enrolled":S.ob.elig?"pending":"notyet",
+    effective:obEffective(),
+    memberId:"SAMPLE-"+String(Math.abs(hashStr((D.name||"member")+D.zip))).slice(0,8),
+    appNo:"APP-"+String(Date.now()).slice(-7)};
+  S.ob.decision=dec;S.ob.progs=progs;S.ob.flags=flags;S.ob.done=true;S.ob.pend=null;
+  bot(t("ob_working"));
+  later(()=>new Promise(async res=>{
+    const ty=add("typing",'<span class="dots"><i></i><i></i><i></i></span>');const ts=ty.querySelector(".ts");if(ts)ts.remove();
+    let blob=null;try{blob=obRender()}catch(e){console.error("onboard pdf",e)}
+    ty.remove();
+    if(S.obDoc&&S.obDoc.url)try{URL.revokeObjectURL(S.obDoc.url)}catch(e){}
+    if(blob)S.obDoc={blob,url:URL.createObjectURL(blob),date:now(),
+      name:`ELIA-humana-benefits-${(D.name||"member").replace(/[^A-Za-z0-9]+/g,"-").toLowerCase()}.pdf`};
+    setFact("ob",{fn:()=>`${HUM.carrier} · ${HUM.health.short} · ${usd(dec.issued)} ${t("ob_fact_life")}`},"src_chat","cf_conf");
+    addFile({id:"onboard",type:"ins",title:()=>t("file_ob"),body:obFileHTML,link:"insurance"});
+    addUpdate(()=>t("ob_upd"));renderHQ();flashHQ();res()}));
+  later(()=>{obCard();bot(t("ob_after"))});
+  later(obDoneReplies)}
+function hashStr(s){let h=0;for(let i=0;i<String(s).length;i++)h=(h*31+String(s).charCodeAt(i))|0;return h}
+
+/* ---- the decision card ---- */
+function obCard(){const dec=S.ob.decision,D=S.ob.d;
+  const kb=S.obDoc?Math.max(1,Math.round(S.obDoc.blob.size/1024)):0;
+  const prog=dec.progs.slice(0,4).map(k=>`<li>${t("ob_prog_"+k)}</li>`).join("");
+  bot(`<div class="card mp-card"><div class="card-h"><span class="eyebrow">${t("ob_card_h")}</span><span class="ph">${t("ph_ob")}</span></div>
+  <h4 style="margin:0">${esc(HUM.carrier)} · ${esc(HUM.health.short)}</h4>
+  <p style="margin:0;font-size:13.5px">${t("ob_card_sub",{app:dec.appNo})}</p>
+  <div class="mp-tiles">
+    <span><b>${dec.health==="enrolled"?usd(HUM.health.premium)+t("ob_per_month"):t("ob_na")}</b><small>${t("ob_tile_health")}</small></span>
+    <span><b>${usd(dec.issued)}</b><small>${t("ob_tile_life")}</small></span>
+    <span><b>${usd2(dec.premium)}${t("ob_per_month")}</b><small>${t("ob_tile_prem")}</small></span></div>
+  <div class="sec">${t("ob_card_dec")}</div>
+  <ul class="plain">
+    <li>${dec.health==="enrolled"?t("ob_dec_health_ok",{d:obFmtDate(dec.effective)}):dec.health==="pending"?t("ob_dec_health_pend"):t("ob_dec_health_notyet")}</li>
+    <li>${dec.life==="approved"?t("ob_dec_life_ok",{amt:usd(dec.issued)}):t("ob_dec_life_ref",{amt:usd(dec.issued),rest:usd(dec.pending)})}</li>
+  </ul>
+  ${prog?`<div class="sec">${t("ob_card_prog")}</div><ul class="plain">${prog}</ul>`:""}
+  <p class="mq-meta">${t("ob_filemeta",{kb})}</p>
+  <p class="mq-note" style="font-size:12.5px">${t("ob_sample_note")}</p></div>`,{cls:"wide",delay:600})}
+function obDoneReplies(){replies([
+  [t("ob_open"),()=>{obOpen();obDoneReplies()},{silent:true}],
+  [t("ob_share"),()=>{obShare();obDoneReplies()},{silent:true}],
+  [t("ob_hq"),()=>{S.hqTab="files";S.openFile="onboard";setView("hq");renderHQ()},{silent:true}],
+  [t("ob_ask_btn"),()=>obAskStart()],
+  [t("ob_finish"),()=>{bot(t("ob_bye"));if(S.coreDone)coreReplies()}]])}
+
+/* ---- questions about the plan, at any point in the journey ---- */
+function obAskStart(){const pend=S.ob&&S.ob.pend;
+  bot(t("ob_ask_lead"));
+  run(()=>{S.await="ob_q"});
+  replies([[t("ob_eg1"),()=>obAnswer(t("ob_eg1"))],[t("ob_eg2"),()=>obAnswer(t("ob_eg2"))],[t("ob_eg3"),()=>obAnswer(t("ob_eg3"))],
+    [t("ob_ask_back"),()=>{S.await=null;clearReplies();if(!obResume())obDoneReplies()}]]);
+  S.ob&&(S.ob.pend=pend)}
+function obAnswer(q){S.await=null;clearReplies();if(S.ob)S.ob.asked++;
+  later(()=>new Promise(async res=>{const ty=add("typing",'<span class="dots"><i></i><i></i><i></i></span>');const ts=ty.querySelector(".ts");if(ts)ts.remove();
+    let txt=null;const s=sampleOff?null:await getSample();
+    if(s){try{const r=await s(`You are ELIA, Prime Health's AI health companion, helping a member through onboarding onto a Humana plan. Answer their question about the plan.
+Answer in ${LANG_NAME[S.lang]}, 2 to 5 short sentences or up to 4 bullets starting with "- ", plain language, amounts in US dollars.
+Use ONLY the plan information below. If it does not settle the question, say so plainly and point them to Humana member services. Never invent a benefit, a figure or a rule.
+Do not give medical advice and do not promise an approval.
+${obContext()}
+Question: """${q}"""`,{modelTier:"default"});txt=(r&&r.text||"").trim()||null}catch(e){}}
+    ty.remove();add("",txt?recMd(txt):`<p>${obFallback(q)}</p>`);res()}));
+  later(()=>{replies([[t("ob_ask_more"),obAskStart],[t("ob_ask_back"),()=>{if(!obResume())obDoneReplies()}]])})}
+function obContext(){const P=HUM.health,L=HUM.life,D=S.ob?S.ob.d:{},dec=S.ob&&S.ob.decision;
+  return`HEALTH PLAN — ${P.name}, a ${P.kind} for the ${P.year} plan year, from ${HUM.carrier}. Medicare Parts A and B are required to enrol.
+Costs: plan premium ${usd(P.premium)} a month on top of the member's Part B premium. In-network out-of-pocket maximum ${usd(P.moop)} a year.
+Visits: primary care ${usd(P.pcp)} in network, specialist ${usd(P.spec)}, urgent care ${usd(P.urgent)}, emergency room ${usd(P.er)}.
+Hospital: inpatient ${usd(P.inpDay)} a day for days 1 to ${P.inpDays}, then ${usd(0)} a day through day 90. Skilled nursing ${usd(0)} a day for days 1 to ${P.snfFree}, then ${usd(P.snfDay)} a day for days 21 to 100.
+Drugs (Part D): ${usd(P.rxDed)} deductible, then 25 percent coinsurance on retail generic and brand drugs. What the member pays for covered drugs is capped at about ${usd(P.rxCap)} a year. CenterWell Pharmacy home delivery is available. Mail order through this plan is listed as coming soon.
+Dental: oral exams, X-rays, cleanings and periodontics are ${usd(0)} in network. Endodontics, restorative work, implants, orthodontics and oral surgery are not covered.
+Vision: routine eye exam, contact lenses and eyeglasses (frames and lenses together) are ${usd(0)} in network. Frames-only and lenses-only are not covered.
+Hearing: exams and fittings ${usd(0)} in network. Prescription hearing aids cost ${usd(P.aidLow)} to ${usd(P.aidHigh)}. Over-the-counter hearing aids are not covered.
+Not on this plan: an over-the-counter allowance.
+Extras: Go365 wellness rewards. A regional PPO means the member can see out-of-network providers who accept Medicare, usually at a higher share of the cost.
+Support: Humana member and enrolment services on ${P.phone}, TTY ${P.tty}, 8 a.m. to 8 p.m. local time, seven days a week.
+A new member is asked to complete a health risk assessment; it is used to arrange care and support, never to set the plan premium.
+
+LIFE COVER — ${L.name}, group term life insured by Humana Insurance Company, bought through payroll deduction at group rates.
+Amounts: from ${usd(L.min)} upward in ${usd(L.step)} steps, to ${usd(L.max)} for a group of 5 to 50 people and ${usd(500000)} for 51 or more, and ${usd(1000000)} combined with basic life.
+Up to the guaranteed issue amount of ${usd(L.gi)} no health questions are asked. Above it the insurer asks for evidence of insurability before the extra cover starts.
+Included or optional: accidental death and dismemberment with common carrier cover; seat belt, airbag and helmet benefits; a coma benefit of ${L.comaPct} percent up to ${usd(L.comaMax)}; repatriation up to ${usd(L.repat)} for an accidental death more than 100 miles from home; an accelerated death benefit for terminal illness paying 50 to 80 percent of the amount up to ${usd(L.adbMax)}; waiver of premium after ${L.waiverMonths} consecutive months of disability before age ${L.waiverAge}; conversion to an individual whole life policy; portability of voluntary cover after leaving the group, before age ${L.portAge}; an annual increase option of up to ${usd(L.incOption)} a year.
+Family: spouse cover up to ${L.spousePct} percent of the member's amount, ${usd(L.spouseMin)} minimum; child cover ${usd(5000)} or ${usd(L.childHigh)} from 6 months to age 26. Spouse cover ends at 70, child cover at 26.
+The amount reduces on a schedule beginning at age ${L.reduceAge} or 70. Rates are guaranteed for two years, or three where offered.
+
+THIS APPLICANT: ${D.name||"—"}, age ${D.age||"—"}, ZIP ${D.zip||"—"}, ${D.tobacco?"has used tobacco in the last 12 months":"no tobacco in the last 12 months"}, Medicare ${D.medicare==="ab"?"Parts A and B":D.medicare==="a"?"Part A only":D.medicare==="no"?"not enrolled yet":"not applicable"}. Life cover requested ${D.amount?usd(D.amount):"not chosen yet"}${D.premium?", quoted at "+usd2(D.premium)+" a month":""}. Beneficiary ${D.bene||"not named yet"}${D.rel?" ("+D.rel+")":""}.
+${dec?`DECISION: health plan ${dec.health}, life ${dec.life}, issued ${usd(dec.issued)}${dec.pending?", "+usd(dec.pending)+" pending evidence of insurability":""}, premium ${usd2(dec.premium)} a month, effective ${obFmtDate(dec.effective,"en")}.`:""}
+Note for the assistant: this is a demonstration. The schedule of amounts above is a demo schedule; the product rules come from Humana's published plan materials. No real application is submitted.`}
+function obFallback(q){const P=HUM.health,L=HUM.life;
+  if(/what is|what's this|overview|tell me about|about (this|the) plan|qu[eé] es|de qu[eé] se trata|ما هي|ما هذه/i.test(q))return t("ob_fb_overview",{plan:P.name,prem:usd(P.premium),moop:usd(P.moop),life:L.name});
+  if(/dental|dentist|teeth|dentista|أسنان/i.test(q))return t("ob_fb_dental");
+  if(/vision|eye|glass|lens|vista|ojo|نظار|عين/i.test(q))return t("ob_fb_vision");
+  if(/hearing|hearing aid|audi|oíd|سمع/i.test(q))return t("ob_fb_hearing");
+  if(/drug|rx|prescription|pharmac|medicine|medicamento|farmac|دواء|صيدل/i.test(q))return t("ob_fb_drug",{ded:usd(P.rxDed),cap:usd(P.rxCap)});
+  if(/specialist|doctor|visit|copay|co-?pay|especialista|médico|طبيب/i.test(q))return t("ob_fb_visit",{pcp:usd(P.pcp),spec:usd(P.spec),er:usd(P.er)});
+  if(/out.of.pocket|maximum|max|premium|cost|price|prima|costo|تكلفة|قسط/i.test(q))return t("ob_fb_cost",{prem:usd(P.premium),moop:usd(P.moop)});
+  if(/network|ppo|out.of.network|red|شبكة/i.test(q))return t("ob_fb_network");
+  if(/life|beneficiar|death|vida|حياة|مستفيد/i.test(q))return t("ob_fb_life",{gi:usd(L.gi),max:usd(L.max)});
+  if(/health risk|assessment|hra|questions|evaluaci|تقييم/i.test(q))return t("ob_fb_hra");
+  return t("ob_fb_default",{tel:P.phone,tty:P.tty})}
+
+/* ---- the document ---- */
+function obOpen(){return obDeliver(false)}
+function obShare(){return obDeliver(true)}
+async function obDeliver(share){const m=S.obDoc;if(!m)return;
+  if(share){try{const file=new File([m.blob],m.name,{type:"application/pdf"});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:t("file_ob"),text:t("ob_share_text")});return}}catch(e){}}
+  try{if(window.claude&&typeof claude.use==="function"){const dl=await claude.use("downloads");
+    if(dl){await dl.save({filename:m.name,data:m.blob});return}}}catch(e){}
+  if(!share){const w=window.open(m.url,"_blank");if(w)return}
+  const a=document.createElement("a");a.href=m.url;a.download=m.name;document.body.appendChild(a);a.click();a.remove()}
+function obFileHTML(){const dec=S.ob&&S.ob.decision;if(!dec)return"";const D=S.ob.d;
+  return`<p style="margin:0"><b>${esc(HUM.carrier)} · ${esc(HUM.health.short)}</b><br><span class="note">${t("ob_file_sub",{app:dec.appNo})}</span></p>
+  <ul class="plain">
+    <li>${t("ob_file_health")}: ${dec.health==="enrolled"?t("ob_file_from",{d:obFmtDate(dec.effective)}):t("ob_na")}</li>
+    <li>${t("ob_file_life")}: ${usd(dec.issued)} · ${usd2(dec.premium)}${t("ob_per_month")}</li>
+    <li>${t("ob_file_bene")}: ${esc(D.bene||"—")}</li>
+    <li class="note">${t("ob_sample_short")}</li></ul>
+  <div class="ins-actions"><button class="btn" data-ob="open">${t("ob_open")}</button><button class="btn ghost" data-ob="share">${t("ob_share")}</button><button class="btn ghost" data-ob="again">${t("ob_again")}</button></div>`}
+document.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest("[data-ob]");if(!b)return;const a=b.dataset.ob;
+  if(a==="open")return obOpen();
+  if(a==="share")return obShare();
+  if(a==="again"){setView("chat");S.files=S.files.filter(f=>f.id!=="onboard");delete S.facts.ob;S.obDoc=null;renderHQ();obStart();return}});
+
+/* ---- the benefits summary document ---- */
+function obRow(d,label,value,note){const w1=PDF_CW*0.46,w2=PDF_CW-w1-10;
+  const L1=pdfWrap(label,"F1",9.8,w1-8),L2=pdfWrap(value,"F2",9.8,w2);
+  const n=Math.max(L1.length,L2.length)+(note?1:0);
+  L1.forEach((ln,i)=>d.text(ln,PDF_M,d.y+i*13,"F1",9.8,C_MUTE));
+  L2.forEach((ln,i)=>d.text(ln,PDF_M+w1+10,d.y+i*13,"F2",9.8,C_BODY));
+  if(note)d.text(note,PDF_M+w1+10,d.y+Math.max(L1.length,L2.length)*13,"F1",8.4,C_MUTE);
+  d.y+=n*13+5;d.line(PDF_M,d.y,PDF_W-PDF_M,d.y,C_LINE,0.5);d.y+=9}
+function obBullets(d,items,size){const sz=size||9.8;
+  items.forEach(it=>{d.circle(PDF_M+3,d.y-3,1.8,C_RUST);
+    pdfWrap(it,"F1",sz,PDF_CW-16).forEach((ln,i)=>d.text(ln,PDF_M+13,d.y+i*(sz*1.38),"F1",sz,C_BODY));
+    d.y+=pdfWrap(it,"F1",sz,PDF_CW-16).length*(sz*1.38)+4});
+  d.y+=4}
+function obBanner(d,text){const h=26;d.fill(PDF_M,d.y,PDF_CW,h,C_PEACH);d.fill(PDF_M,d.y,3.5,h,C_RUST);
+  d.text(text,PDF_M+14,d.y+17,"F2",9,C_BODY);d.y+=h+18}
+function obRender(){
+  const T2=(k,v)=>t(k,v||{},obPdfLang());
+  const D=S.ob.d,H=S.ob.h,dec=S.ob.decision,P=HUM.health,L=HUM.life;
+  const d=PdfDoc();
+  const foot=(label,n)=>mpFooter(d,label+"  ·  "+T2("ob_pdf_sample_foot"),n);
+
+  /* 1 — cover */
+  d.add();
+  mpEyebrow(d,T2("ob_pdf_eyebrow"));
+  mpH1(d,T2("ob_pdf_title"));
+  d.y+=4;
+  mpBody(d,T2("ob_pdf_lead",{carrier:HUM.carrier,plan:P.short,name:D.name||"—"}),11.5,C_BODY);
+  d.y+=18;
+  obBanner(d,T2("ob_pdf_banner"));
+  mpStats(d,[
+    {big:dec.health==="enrolled"?usd(P.premium)+"/mo":T2("ob_na"),label:T2("ob_pdf_s1")},
+    {big:usd(dec.issued),label:T2("ob_pdf_s2")},
+    {big:usd2(dec.premium)+"/mo",label:T2("ob_pdf_s3")}]);
+  d.y+=6;
+  obRow(d,T2("ob_pdf_app"),dec.appNo);
+  obRow(d,T2("ob_pdf_name"),D.name||"—");
+  obRow(d,T2("ob_pdf_dob"),(D.dobText||"—")+"  ·  "+T2("ob_pdf_age",{age:D.age}));
+  obRow(d,T2("ob_pdf_zip"),D.zip||"—");
+  obRow(d,T2("ob_pdf_medicare"),D.medicare==="ab"?T2("ob_med_both"):D.medicare==="a"?T2("ob_med_a"):D.medicare==="no"?T2("ob_med_no"):T2("ob_na"));
+  obRow(d,T2("ob_pdf_date"),obFmtDate(new Date(2026,10,9),obPdfLang()));
+  foot(T2("ob_pdf_f_cover"),1);
+
+  /* 2 — the health plan */
+  d.add();mpEyebrow(d,T2("ob_pdf_e_health"));mpH2(d,T2("ob_pdf_h_health"));d.y+=6;
+  if(dec.health==="enrolled"){
+    mpCallout(d,T2("ob_pdf_enrolled_lead"),T2("ob_pdf_enrolled",{plan:P.name,d:obFmtDate(dec.effective,obPdfLang()),id:dec.memberId}),"green")}
+  else if(dec.health==="pending"){mpCallout(d,T2("ob_pdf_pending_lead"),T2("ob_pdf_pending"),"peach")}
+  else{mpCallout(d,T2("ob_pdf_notyet_lead"),T2("ob_pdf_notyet",{plan:P.short}),"peach")}
+  d.text(T2("ob_pdf_whatyoupay").toUpperCase(),PDF_M,d.y,"F2",8.5,C_MUTE,{ls:1});d.y+=16;
+  obRow(d,T2("ob_pdf_premium"),usd(P.premium)+T2("ob_pdf_mo"),T2("ob_pdf_premium_n"));
+  obRow(d,T2("ob_pdf_moop"),usd(P.moop),T2("ob_pdf_moop_n"));
+  obRow(d,T2("ob_pdf_pcp"),usd(P.pcp));
+  obRow(d,T2("ob_pdf_spec"),usd(P.spec));
+  obRow(d,T2("ob_pdf_urgent"),usd(P.urgent)+"  ·  "+T2("ob_pdf_er")+" "+usd(P.er));
+  obRow(d,T2("ob_pdf_inpatient"),T2("ob_pdf_inpatient_v",{a:usd(P.inpDay),n:P.inpDays}));
+  obRow(d,T2("ob_pdf_snf"),T2("ob_pdf_snf_v",{n:P.snfFree,a:usd(P.snfDay)}));
+  obRow(d,T2("ob_pdf_rx"),T2("ob_pdf_rx_v",{ded:usd(P.rxDed),pct:P.rxCoins}),T2("ob_pdf_rx_n",{cap:usd(P.rxCap)}));
+  foot(T2("ob_pdf_f_health"),2);
+
+  /* 3 — extras and network */
+  d.add();mpEyebrow(d,T2("ob_pdf_e_extras"));mpH2(d,T2("ob_pdf_h_extras"));d.y+=8;
+  mpCards(d,[
+    {title:T2("ob_pdf_dental"),body:T2("ob_pdf_dental_b")},
+    {title:T2("ob_pdf_vision"),body:T2("ob_pdf_vision_b")},
+    {title:T2("ob_pdf_hearing"),body:T2("ob_pdf_hearing_b",{lo:usd(P.aidLow),hi:usd(P.aidHigh)})},
+    {title:T2("ob_pdf_go365"),body:T2("ob_pdf_go365_b")}],2);
+  d.y+=10;
+  d.text(T2("ob_pdf_network").toUpperCase(),PDF_M,d.y,"F2",8.5,C_MUTE,{ls:1});d.y+=16;
+  mpBody(d,T2("ob_pdf_network_b"),9.8,C_BODY);d.y+=14;
+  mpCallout(d,T2("ob_pdf_notcov_lead"),T2("ob_pdf_notcov"),"peach");
+  foot(T2("ob_pdf_f_health"),3);
+
+  /* 4 — life cover */
+  d.add();mpEyebrow(d,T2("ob_pdf_e_life"));mpH2(d,T2("ob_pdf_h_life"));d.y+=6;
+  if(dec.life==="approved")mpCallout(d,T2("ob_pdf_life_ok_lead"),T2("ob_pdf_life_ok",{amt:usd(dec.issued),prem:usd2(dec.premium)}),"green");
+  else mpCallout(d,T2("ob_pdf_life_ref_lead"),T2("ob_pdf_life_ref",{amt:usd(dec.issued),rest:usd(dec.pending),gi:usd(L.gi)}),"peach");
+  obRow(d,T2("ob_pdf_product"),L.name);
+  obRow(d,T2("ob_pdf_requested"),usd(D.amount||0));
+  obRow(d,T2("ob_pdf_inforce"),usd(dec.issued),dec.pending?T2("ob_pdf_pending_amt",{rest:usd(dec.pending)}):null);
+  obRow(d,T2("ob_pdf_rate"),usd2(dec.premium)+T2("ob_pdf_mo"),T2("ob_pdf_rate_n",{r:obRate(D.age,D.tobacco).toFixed(2)}));
+  obRow(d,T2("ob_pdf_bene"),(D.bene||"—")+(D.rel?"  ·  "+D.rel:""));
+  obRow(d,T2("ob_pdf_tobacco"),D.tobacco?T2("ob_tob_yes"):D.quit?T2("ob_tob_quit"):T2("ob_tob_no"));
+  d.y+=4;
+  d.text(T2("ob_pdf_included").toUpperCase(),PDF_M,d.y,"F2",8.5,C_MUTE,{ls:1});d.y+=16;
+  obBullets(d,[
+    T2("ob_pdf_inc1",{pct:L.comaPct,max:usd(L.comaMax)}),
+    T2("ob_pdf_inc2",{max:usd(L.adbMax)}),
+    T2("ob_pdf_inc3",{n:L.waiverMonths,age:L.waiverAge}),
+    T2("ob_pdf_inc4",{age:L.portAge}),
+    T2("ob_pdf_inc5",{amt:usd(L.incOption)}),
+    T2("ob_pdf_inc6",{age:L.reduceAge})]);
+  foot(T2("ob_pdf_f_life"),4);
+
+  /* 5 — the health risk assessment */
+  d.add();mpEyebrow(d,T2("ob_pdf_e_hra"));mpH2(d,T2("ob_pdf_h_hra"));d.y+=4;
+  mpBody(d,T2("ob_pdf_hra_lead"),9.8,C_MUTE);d.y+=16;
+  const cond=(H.cond||[]).map(k=>T2("ob_c_"+k));
+  const adl=(H.adl||[]).map(k=>T2("ob_adl_"+k));
+  const prev=(H.prev||[]).map(k=>T2("ob_prev_"+k));
+  obRow(d,T2("ob_h_health"),H.self?T2(H.self):"—");
+  obRow(d,T2("ob_pdf_conds"),cond.length?cond.join(", "):T2("ob_c_none"));
+  obRow(d,T2("ob_pdf_meds"),(H.medsK?T2(H.medsK):"—")+"  ·  "+(H.medTrouble?T2(H.medTrouble):"—"));
+  obRow(d,T2("ob_pdf_hosp"),H.hospK?T2(H.hospK):"—");
+  obRow(d,T2("ob_pdf_falls"),H.fallsK?T2(H.fallsK):"—");
+  obRow(d,T2("ob_pdf_adl"),adl.length?adl.join(", "):T2("ob_adl_none"));
+  obRow(d,T2("ob_pdf_pain"),H.pain?T2(H.pain):"—");
+  obRow(d,T2("ob_pdf_mood"),T2("ob_pdf_mood_v",{n:H.phq||0}),T2("ob_pdf_mood_n"));
+  obRow(d,T2("ob_pdf_active"),H.activeK?T2(H.activeK):"—");
+  obRow(d,T2("ob_pdf_food"),(H.food?T2(H.food):"—")+"  ·  "+(H.ride?T2(H.ride):"—"));
+  obRow(d,T2("ob_pdf_prev"),prev.length?prev.join(", "):T2("ob_prev_none"));
+  obRow(d,T2("ob_pdf_helper"),H.support?T2(H.support):"—");
+  foot(T2("ob_pdf_f_hra"),5);
+
+  /* 6 — what happens next */
+  d.add();mpEyebrow(d,T2("ob_pdf_e_next"));mpH2(d,T2("ob_pdf_h_next"));d.y+=8;
+  const progs=(dec.progs||[]).slice(0,6);
+  if(progs.length){
+    mpCards(d,progs.map((k,i)=>({n:String(i+1),title:T2("ob_prog_"+k),body:T2("ob_progb_"+k)})),2);
+    d.y+=10}
+  d.text(T2("ob_pdf_todo").toUpperCase(),PDF_M,d.y,"F2",8.5,C_MUTE,{ls:1});d.y+=16;
+  obBullets(d,[
+    dec.eoi?T2("ob_pdf_todo_eoi"):T2("ob_pdf_todo_noeoi"),
+    T2("ob_pdf_todo_card",{d:obFmtDate(dec.effective,obPdfLang())}),
+    T2("ob_pdf_todo_pcp"),
+    T2("ob_pdf_todo_rx")]);
+  d.y+=2;
+  mpCallout(d,T2("ob_pdf_support_lead"),T2("ob_pdf_support",{tel:P.phone,tty:P.tty}),"green");
+  d.y+=2;
+  mpBody(d,T2("ob_pdf_disclaimer",{carrier:HUM.carrier,plan:P.name}),8.4,C_MUTE);
+  foot(T2("ob_pdf_f_next"),6);
+  return d.build()}
+
+Object.assign(L.en,{
+ ob_voice_start:"I've started that in the chat for you. Have a look at the screen and we'll go through it together.",ob_voice_ok:"Got it.",
+ p_onboard:"Onboard my plan",file_ob:"Humana benefits summary",ph_ob:"Plan onboarding · Humana",
+ ob_step:"Question {n} of {of}",ob_ask_btn:"Ask about the plan",ob_back:"Right, back to your application.",ob_skip:"Rather not say",ob_prefill:"I have this from your profile \u2014 just confirm it.",
+ ob_intro:"Let's get you onboarded, {name}. This is separate from the day-to-day plan you and I work on, so nothing here changes your goals or your score.",
+ ob_intro2:"Two things in one sitting: you enrol onto the Humana health plan, and you apply for Humana voluntary term life. One health risk assessment covers both, so you answer once. Nothing is sent to Humana, but every figure I quote comes from the plan's own materials.",
+ ob_consent_q:"About five minutes, and you can stop or ask me anything as we go. Shall I use what's already in your profile so you're not retyping it?",
+ ob_consent_yes:"Yes, let's start",ob_what_btn:"First, what is this plan?",ob_not_now:"Not right now",
+ ob_what_q:"What is this Humana plan and what does it cover?",
+ ob_later:"No problem. It's under Quick actions whenever you want it, or just say “onboard my plan”.",
+ ob_q_name:"What name should go on the application? Your full legal name, as it appears on your Medicare card or ID.",
+ ob_use_name:"Use {name}",
+ ob_q_dob:"What's your date of birth? Day, month and year is fine.",
+ ob_dob_eg:"14 March 1959",ob_dob_again:"I couldn't read a date in that. Try something like 14 March 1959, or 1959-03-14.",
+ ob_dob_ok:"Thank you. That makes you {age}, so you're eligible for the Medicare Advantage plan.",
+ ob_under65:"Thanks. At {age} you aren't Medicare-eligible yet, and {plan} is a Medicare plan, so I can't enrol you onto it today. The life cover is a different matter: Humana voluntary term life has nothing to do with Medicare, and I can take you through that now.",
+ ob_under65_q:"Want to carry on with the life application?",
+ ob_under65_yes:"Yes, carry on",ob_under65_no:"Leave it for now",
+ ob_q_medicare:"Are you enrolled in Medicare Part A and Part B? A Medicare Advantage plan needs both.",
+ ob_med_both:"Yes, both",ob_med_a:"Part A only",ob_med_no:"Not yet",
+ ob_med_a_note:"Noted. Part B has to be in place before the plan can start, so I'll flag that on the application and Humana will pick it up with you.",
+ ob_med_no_note:"Noted. I'll carry on and put the enrolment on hold; Humana can't start the plan until Parts A and B are active.",
+ ob_q_zip:"What ZIP code do you live in? Medicare Advantage plans are sold county by county, so this decides whether this one is available to you.",
+ ob_zip_eg:"45202",ob_zip_again:"I need a five-digit ZIP code. What is it?",
+ ob_zip_ok:"Good news: {plan} is offered in {zip}.",
+ ob_q_sex:"And your sex as recorded on your Medicare card or ID?",
+ ob_q_tobacco:"Have you used tobacco or nicotine in the last 12 months? This one is for the life cover rate, not the health plan.",
+ ob_tob_no:"No",ob_tob_quit:"I quit over a year ago",ob_tob_yes:"Yes",
+ ob_amount_lead:"Now the life cover. You can take from {min} upward in steps of a thousand. Up to {gi} there are no health questions at all — that's the guaranteed issue amount. Above it, Humana asks for evidence of insurability before the extra cover starts. The ceiling here is {max}.",
+ ob_q_amount:"How much cover would you like?",ob_per_month:"/mo",ob_amount_other:"A different amount",
+ ob_q_amount_other:"How much? Anything between {min} and {max}, and I'll round to the nearest thousand.",
+ ob_amount_ok:"{amt} it is — that quotes at {prem} a month at your age, taken from pay.",
+ ob_amount_eoi:"Because that's above the {gi} guaranteed issue amount, the part above it needs evidence of insurability. Your answers in a moment decide whether that's a short review or a longer one.",
+ ob_q_bene:"Who should the benefit go to? A first and last name is enough.",
+ ob_bene_eg:"Use Maya Rivera",ob_bene_eg_val:"Maya Rivera",
+ ob_q_rel:"And {who} is your…",
+ ob_rel_spouse:"Spouse",ob_rel_child:"Child",ob_rel_parent:"Parent",ob_rel_other:"Someone else",
+ ob_hra_intro:"That's the paperwork done. Now the health risk assessment. Humana asks every new member to complete one — it's how they arrange care and support, and it never changes what you pay for the health plan. The same answers cover the life application.",
+ ob_hra_pre:"I've already pulled this from your record, so you can leave it alone unless something's changed: {list}.",
+ ob_hra_go_q:"Ready?",ob_hra_go:"Go ahead",
+ ob_h_health:"In general, how would you say your health is?",
+ ob_hs_ex:"Excellent",ob_hs_vg:"Very good",ob_hs_good:"Good",ob_hs_fair:"Fair",ob_hs_poor:"Poor",
+ ob_h_cond:"Which of these has a doctor told you that you have? Tap all that apply, then Done.",
+ ob_c_diabetes:"Diabetes",ob_c_bp:"High blood pressure",ob_c_chol:"High cholesterol",ob_c_heart:"Heart condition",
+ ob_c_lung:"Asthma or COPD",ob_c_joint:"Arthritis or joint pain",ob_c_kidney:"Kidney disease",ob_c_mood:"Depression or anxiety",ob_c_none:"None of these",
+ ob_pick_done:"Done ({n})",
+ ob_h_meds:"How many prescription medicines do you take on a regular basis?",
+ ob_m_0:"None",ob_m_13:"1 to 3",ob_m_47:"4 to 7",ob_m_8:"8 or more",
+ ob_h_meds2:"Do you ever have trouble paying for them, or remembering to take them?",
+ ob_never:"Never",ob_sometimes:"Sometimes",ob_often:"Often",
+ ob_h_hosp:"In the last 12 months, how many times have you stayed overnight in hospital or gone to an emergency room?",
+ ob_hp_0:"Not once",ob_hp_1:"Once",ob_hp_2:"Twice",ob_hp_3:"Three or more",
+ ob_h_falls:"Have you fallen in the last 12 months?",
+ ob_f_0:"No falls",ob_f_1:"Once",ob_f_2:"Twice or more",ob_f_worry:"No, but I worry about it",
+ ob_h_adl:"Do you need help from another person with any of these? Tap all that apply.",
+ ob_adl_bath:"Bathing",ob_adl_dress:"Dressing",ob_adl_meals:"Preparing meals",ob_adl_around:"Getting around the house",ob_adl_transport:"Getting to appointments",ob_adl_none:"None of these",
+ ob_h_pain:"How much bodily pain have you had in the last week?",
+ ob_p_none:"None",ob_p_mild:"Mild",ob_p_mod:"Moderate",ob_p_sev:"Severe",
+ ob_h_mood1:"Over the last two weeks, how often have you had little interest or pleasure in doing things?",
+ ob_h_mood2:"And over the last two weeks, how often have you felt down, depressed or hopeless?",
+ ob_phq_0:"Not at all",ob_phq_1:"Several days",ob_phq_2:"More than half the days",ob_phq_3:"Nearly every day",
+ ob_mood_care:"Thank you for answering that honestly — it isn't an easy one. What you've described is common and it's treatable, and it has no effect on your cover.",
+ ob_mood_care2:"I'll put behavioural health support on your list so someone from the plan reaches out. If you'd rather not wait, your doctor is a good first call. And if things ever feel worse than you can manage, please tell someone you trust the same day.",
+ ob_h_active:"How many days in a typical week do you do at least 30 minutes of physical activity?",
+ ob_a_0:"None",ob_a_12:"1 or 2",ob_a_34:"3 or 4",ob_a_5:"5 or more",
+ ob_h_food:"In the last 12 months, did you ever worry that food would run out before you had money to buy more?",
+ ob_h_ride:"Is getting to medical appointments ever difficult — no ride, no transport, too far?",
+ ob_r_no:"No, that's fine",ob_r_some:"Sometimes",ob_r_often:"Often",
+ ob_h_prev:"Which of these have you had in the last year or two? Tap all that apply.",
+ ob_prev_flu:"Flu shot",ob_prev_colon:"Colorectal screening",ob_prev_dental:"Dental visit",ob_prev_eye:"Eye exam",ob_prev_none:"None of these",
+ ob_h_support:"Last one. If you were unwell for a few days, is there someone who could help you?",
+ ob_s_family:"Yes, family nearby",ob_s_friend:"Yes, a friend or neighbour",ob_s_none:"No one regularly",
+ ob_after:"It's saved to My Files. Open it, share it with whoever needs a copy, or ask me anything that is still unclear.",
+ ob_working:"That's everything. Give me a moment to put your application together and write up your summary.",
+ ob_fact_life:"life cover",ob_upd:"Humana onboarding completed",
+ ob_card_h:"Your application",ob_card_sub:"Application {app} · prepared by ELIA",
+ ob_na:"Not yet",ob_tile_health:"Health plan premium, on top of your Part B premium.",
+ ob_tile_life:"Life cover in force once the plan starts.",ob_tile_prem:"Life premium, taken from pay.",
+ ob_card_dec:"Where it stands",
+ ob_dec_health_ok:"Health plan: enrolled, starting {d}.",
+ ob_dec_health_pend:"Health plan: on hold until your Medicare Part B is active.",
+ ob_dec_health_notyet:"Health plan: not available until you're Medicare-eligible. I've noted it for later.",
+ ob_dec_life_ok:"Life cover: approved at {amt}, no further questions.",
+ ob_dec_life_ref:"Life cover: {amt} approved now; the remaining {rest} goes to an underwriter for a short review.",
+ ob_card_prog:"What I've arranged for you",
+ ob_filemeta:"Benefits summary · PDF · {kb} KB · saved to My Files",
+ ob_sample_note:"This is a demonstration. No application has been sent to Humana, and the document is marked as a sample.",
+ ob_sample_short:"Sample document · nothing submitted",
+ ob_open:"Open the summary",ob_share:"Share",ob_hq:"See it in My Files",ob_again:"Start a new application",
+ ob_finish:"That's everything",ob_bye:"Good. It's all in My Files, and I'm here if anything comes up.",
+ ob_share_text:"My Humana benefits summary from ELIA",
+ ob_ask_lead:"Ask away — anything about what's covered, what it costs, or how to get help.",
+ ob_eg1:"What do I pay to see a specialist?",ob_eg2:"Is my dentist covered?",ob_eg3:"What happens if I go out of network?",
+ ob_ask_back:"Back to the application",ob_ask_more:"Ask something else",
+ ob_file_sub:"Application {app}",ob_file_health:"Health plan",ob_file_from:"from {d}",ob_file_life:"Life cover",ob_file_bene:"Beneficiary",
+ ob_prog_chronic:"Chronic condition care management",
+ ob_prog_falls:"Falls prevention and a home safety check",
+ ob_prog_behav:"Behavioural health support",
+ ob_prog_food:"Help with food and community resources",
+ ob_prog_ride:"Help getting to appointments",
+ ob_prog_move:"Go365 activity rewards",
+ ob_prog_pharm:"A pharmacist medicine review",
+ ob_prog_prev:"Catching up on preventive screenings",
+ ob_prog_pain:"A pain management referral",
+ ob_progb_chronic:"A nurse care manager keeps an eye on your conditions between visits and helps you keep appointments and tests on track.",
+ ob_progb_falls:"A short balance and home-hazard review, because a fall is the thing most likely to put a good year off course.",
+ ob_progb_behav:"A call from the plan's behavioural health team, who can arrange counselling or point you to your own doctor, whichever you prefer.",
+ ob_progb_food:"A referral to local food resources and the community programmes the plan works with in your area.",
+ ob_progb_ride:"Help arranging rides to medical appointments so a missed visit doesn't turn into a bigger problem.",
+ ob_progb_move:"Go365 rewards you for everyday activity. It is the easiest part of the plan to get value from.",
+ ob_progb_pharm:"A pharmacist reviews everything you take together, looks for clashes and simplifies the schedule where it can be simplified.",
+ ob_progb_prev:"A reminder list of the screenings you're due, most of which cost you nothing on this plan.",
+ ob_progb_pain:"A referral to discuss pain management, so it is treated rather than endured.",
+ ob_fb_overview:"{plan} is a Medicare Advantage regional PPO with Part D drug cover, so it replaces Original Medicare and adds to it. It runs {prem} a month on top of your Part B premium, and the most you would pay in network for medical care in a year is {moop}. Dental, vision and hearing are included, and Go365 rewards healthy activity. Alongside it you are applying for {life}, which is separate cover that pays your beneficiary.",
+ ob_fb_dental:"Oral exams, X-rays, cleanings and periodontics are $0 in network on this plan. Endodontics, restorative work, implants, orthodontics and oral surgery aren't covered. Whether your own dentist is in network depends on your area, so it's worth checking before you book.",
+ ob_fb_vision:"A routine eye exam is $0 in network, and so are contact lenses or a pair of eyeglasses with frames and lenses together. Frames on their own or lenses on their own aren't covered.",
+ ob_fb_hearing:"Hearing exams and fittings are $0 in network. Prescription hearing aids cost $499 to $725 each. Over-the-counter hearing aids aren't covered on this plan.",
+ ob_fb_drug:"Part D on this plan has a {ded} deductible, then you pay 25 percent of the cost of retail generic and brand drugs. What you pay for covered drugs is capped at about {cap} a year. CenterWell Pharmacy home delivery is available.",
+ ob_fb_visit:"Primary care is {pcp} in network, a specialist is {spec}, and the emergency room is {er}. Urgent care is cheaper than the emergency room, so use it where you can.",
+ ob_fb_cost:"The plan premium is {prem} a month, on top of whatever you pay for Medicare Part B. The most you'd pay in network in a year for medical care is {moop}.",
+ ob_fb_network:"It's a regional PPO, so you can see providers outside the network as long as they accept Medicare — you just pay a bigger share. In network is always cheaper, and your out-of-pocket maximum is the in-network one.",
+ ob_fb_life:"Up to {gi} there are no health questions. Above that Humana asks for evidence of insurability before the extra cover starts. The ceiling is {max}, and it stays yours if you leave the group, as long as you port it before 70.",
+ ob_fb_hra:"The health risk assessment is how the plan works out what care and support to arrange for you. It doesn't change your premium and it can't be used to turn you down for the health plan.",
+ ob_fb_default:"I can't settle that one from the plan materials I have. Humana member services will know: {tel}, TTY {tty}, 8 a.m. to 8 p.m. local time, seven days a week.",
+ ob_pdf_sample_foot:"Sample document, not a Humana policy",
+ ob_pdf_eyebrow:"Benefits summary",ob_pdf_title:"Your Humana cover, in one place",
+ ob_pdf_lead:"Prepared for {name} by ELIA, covering enrolment onto the {plan} health plan from {carrier} and an application for Humana voluntary term life.",
+ ob_pdf_banner:"Demonstration only. No application has been submitted and this is not a policy document.",
+ ob_pdf_s1:"Health plan premium each month, on top of the Part B premium.",
+ ob_pdf_s2:"Life cover in force once the plan starts.",
+ ob_pdf_s3:"Life premium each month, taken from pay.",
+ ob_pdf_app:"Application",ob_pdf_name:"Name",ob_pdf_dob:"Date of birth",ob_pdf_age:"age {age}",ob_pdf_zip:"ZIP code",
+ ob_pdf_medicare:"Medicare",ob_pdf_date:"Prepared",ob_pdf_f_cover:"Benefits summary",
+ ob_pdf_e_health:"Health plan",ob_pdf_h_health:"What you have and what it costs",
+ ob_pdf_enrolled_lead:"Enrolled.",ob_pdf_enrolled:"You are enrolled onto {plan}, starting {d}. Your member reference on this sample is {id}; a real member ID card would arrive before the start date.",
+ ob_pdf_pending_lead:"On hold.",ob_pdf_pending:"Your enrolment cannot start until Medicare Part B is active. Everything else is ready and waiting on that one step.",
+ ob_pdf_notyet_lead:"Not yet available.",ob_pdf_notyet:"{plan} is a Medicare Advantage plan, so it opens to you when you become Medicare-eligible. Your life cover is unaffected.",
+ ob_pdf_whatyoupay:"What you pay",ob_pdf_mo:" a month",
+ ob_pdf_premium:"Plan premium",ob_pdf_premium_n:"On top of your Medicare Part B premium.",
+ ob_pdf_moop:"In-network out-of-pocket maximum",ob_pdf_moop_n:"The most you pay for covered medical care in a year.",
+ ob_pdf_pcp:"Primary care visit, in network",ob_pdf_spec:"Specialist visit, in network",
+ ob_pdf_urgent:"Urgent care",ob_pdf_er:"Emergency room",
+ ob_pdf_inpatient:"Inpatient hospital",ob_pdf_inpatient_v:"{a} a day for days 1 to {n}, then $0 a day through day 90",
+ ob_pdf_snf:"Skilled nursing facility",ob_pdf_snf_v:"$0 a day for days 1 to {n}, then {a} a day for days 21 to 100",
+ ob_pdf_rx:"Prescription drugs (Part D)",ob_pdf_rx_v:"{ded} deductible, then {pct}% of the cost",
+ ob_pdf_rx_n:"What you pay for covered drugs is capped at about {cap} a year.",
+ ob_pdf_f_health:"Health plan",
+ ob_pdf_e_extras:"Extras",ob_pdf_h_extras:"The parts people forget they have",
+ ob_pdf_dental:"Dental",ob_pdf_dental_b:"Oral exams, X-rays, cleanings and periodontics are $0 in network. Endodontics, restorative work, implants, orthodontics and oral surgery are not covered.",
+ ob_pdf_vision:"Vision",ob_pdf_vision_b:"Routine eye exam, contact lenses, and eyeglasses with frames and lenses together, all $0 in network. Frames only or lenses only are not covered.",
+ ob_pdf_hearing:"Hearing",ob_pdf_hearing_b:"Exams and fittings $0 in network. Prescription hearing aids {lo} to {hi}. Over-the-counter hearing aids are not covered.",
+ ob_pdf_go365:"Go365 and pharmacy",ob_pdf_go365_b:"Go365 rewards everyday healthy activity. CenterWell Pharmacy delivers maintenance medicines to your door.",
+ ob_pdf_network:"Network",
+ ob_pdf_network_b:"This is a regional PPO. You can see providers outside the network as long as they accept Medicare, and you pay a larger share when you do. The out-of-pocket maximum shown above applies to in-network care, so staying in network is what protects the ceiling.",
+ ob_pdf_notcov_lead:"Worth knowing:",ob_pdf_notcov:"This plan does not include an over-the-counter allowance, and mail order through the plan is listed as coming soon. Benefits vary by county and plan year; the Evidence of Coverage Humana sends you is the document that governs.",
+ ob_pdf_e_life:"Life cover",ob_pdf_h_life:"What your family would receive",
+ ob_pdf_life_ok_lead:"Approved.",ob_pdf_life_ok:"{amt} of cover, at {prem} a month taken from pay, with no further health questions.",
+ ob_pdf_life_ref_lead:"Partly approved.",ob_pdf_life_ref:"{amt} is approved now, which is the guaranteed issue amount of {gi}. The remaining {rest} goes to an underwriter, who will ask for evidence of insurability before that part starts.",
+ ob_pdf_product:"Product",ob_pdf_requested:"Amount requested",ob_pdf_inforce:"Amount in force",
+ ob_pdf_pending_amt:"{rest} pending evidence of insurability.",
+ ob_pdf_rate:"Premium",ob_pdf_rate_n:"Based on ${r} per $1,000 of cover a month at your age band.",
+ ob_pdf_bene:"Beneficiary",ob_pdf_tobacco:"Tobacco in the last 12 months",
+ ob_pdf_included:"What comes with it",
+ ob_pdf_inc1:"Accidental death and dismemberment, with common carrier cover, seat belt, airbag and helmet benefits, and a coma benefit of {pct}% up to {max}.",
+ ob_pdf_inc2:"An accelerated death benefit for terminal illness, paying 50 to 80 percent of the amount, up to {max}.",
+ ob_pdf_inc3:"Waiver of premium if you are disabled for {n} consecutive months before age {age}.",
+ ob_pdf_inc4:"Portability if you leave the group, before age {age}, and conversion to an individual whole life policy.",
+ ob_pdf_inc5:"An annual increase option of up to {amt} a year at the plan anniversary.",
+ ob_pdf_inc6:"The amount reduces on a schedule beginning at age {age}.",
+ ob_pdf_f_life:"Life cover",
+ ob_pdf_e_hra:"Health risk assessment",ob_pdf_h_hra:"What you told us",
+ ob_pdf_hra_lead:"These answers are used to arrange care and support. They do not change what you pay for the health plan, and they cannot be used to refuse you the health plan.",
+ ob_pdf_conds:"Conditions",ob_pdf_meds:"Prescription medicines · trouble taking or paying",
+ ob_pdf_hosp:"Hospital or emergency visits, last 12 months",ob_pdf_falls:"Falls in the last 12 months",
+ ob_pdf_adl:"Needs help with",ob_pdf_pain:"Pain in the last week",
+ ob_pdf_mood:"Mood screen (PHQ-2)",ob_pdf_mood_v:"{n} out of 6",ob_pdf_mood_n:"3 or more suggests a longer conversation is worth having.",
+ ob_pdf_active:"Active days a week",ob_pdf_active_v:"{n} days",
+ ob_pdf_food:"Food running out · getting to appointments",
+ ob_pdf_helper:"Someone who could help",
+ ob_pdf_prev:"Preventive care in the last year or two",ob_pdf_support:"Someone who could help",
+ ob_pdf_f_hra:"Health risk assessment",
+ ob_pdf_e_next:"Next",ob_pdf_h_next:"What happens now",
+ ob_pdf_todo:"Your part",
+ ob_pdf_todo_eoi:"Complete the evidence of insurability form Humana sends for the life cover above the guaranteed issue amount. The approved part is not held up by it.",
+ ob_pdf_todo_noeoi:"Nothing further is needed for your life cover. Keep your beneficiary up to date if your circumstances change.",
+ ob_pdf_todo_card:"Watch for your member ID card before {d}, and carry it to every appointment.",
+ ob_pdf_todo_pcp:"Name a primary care doctor, and book the first visit within the first month while you are well. It is a much better first appointment than one made in a hurry.",
+ ob_pdf_todo_rx:"Move maintenance medicines to CenterWell home delivery, and ask for the pharmacist review.",
+ ob_pdf_support_lead:"If you need a person:",ob_pdf_support:"Humana member and enrolment services, {tel}, TTY {tty}, 8 a.m. to 8 p.m. local time, seven days a week. For anything clinical and urgent, your own doctor or emergency services come first.",
+ ob_pdf_disclaimer:"Prepared by ELIA for Prime Health as a demonstration. No application has been submitted to {carrier} and this is not a policy document, an offer of insurance or a statement of benefits. Plan figures are drawn from published materials for {plan} and the Humana Life plans brochure; the guaranteed issue amount and premium rates shown are a demo schedule. Benefits vary by county and plan year. The Evidence of Coverage and the certificate of insurance Humana issues are the documents that govern.",
+ ob_pdf_f_next:"Next steps"});
+
+Object.assign(L.es,{
+ ob_voice_start:"Ya lo abrí en el chat. Mira la pantalla y lo vamos viendo juntos.",ob_voice_ok:"Listo.",
+ p_onboard:"Dar de alta mi plan",file_ob:"Resumen de cobertura Humana",ph_ob:"Alta de plan · Humana",
+ ob_step:"Pregunta {n} de {of}",ob_ask_btn:"Preguntar sobre el plan",ob_back:"Bien, volvamos a tu solicitud.",ob_skip:"Prefiero no decirlo",
+ ob_prefill:"Lo tengo de tu perfil, solo confírmalo.",
+ ob_intro:"Vamos a darte de alta, {name}. Esto va aparte del plan diario que llevamos tú y yo, así que nada de aquí cambia tus metas ni tu puntaje.",
+ ob_intro2:"Dos cosas de una sentada: te inscribes en el plan de salud de Humana y solicitas el seguro de vida a término voluntario de Humana. Una sola evaluación de riesgo de salud sirve para ambos. No se envía nada a Humana, pero cada cifra que te doy sale de los materiales del propio plan.",
+ ob_consent_q:"Son unos cinco minutos, y puedes parar o preguntarme lo que sea mientras avanzamos. ¿Uso lo que ya está en tu perfil para que no lo escribas otra vez?",
+ ob_consent_yes:"Sí, empecemos",ob_what_btn:"Primero, ¿qué es este plan?",ob_not_now:"Ahora no",
+ ob_what_q:"¿Qué es este plan de Humana y qué cubre?",
+ ob_later:"Sin problema. Está en Acciones rápidas cuando quieras, o solo dime «da de alta mi plan».",
+ ob_q_name:"¿Qué nombre va en la solicitud? Tu nombre legal completo, como aparece en tu credencial de Medicare o tu identificación.",
+ ob_use_name:"Usar {name}",
+ ob_q_dob:"¿Cuál es tu fecha de nacimiento? Día, mes y año está bien.",
+ ob_dob_eg:"14 de marzo de 1959",ob_dob_again:"No alcancé a leer una fecha ahí. Prueba algo como 14 de marzo de 1959, o 1959-03-14.",
+ ob_dob_ok:"Gracias. Eso te da {age} años, así que calificas para el plan Medicare Advantage.",
+ ob_under65:"Gracias. A los {age} todavía no calificas para Medicare, y {plan} es un plan de Medicare, así que hoy no puedo inscribirte. El seguro de vida es otra cosa: el seguro de vida a término voluntario de Humana no tiene nada que ver con Medicare y sí puedo llevarte por esa parte ahora.",
+ ob_under65_q:"¿Seguimos con la solicitud de vida?",
+ ob_under65_yes:"Sí, sigamos",ob_under65_no:"Déjalo por ahora",
+ ob_q_medicare:"¿Estás inscrito en Medicare Parte A y Parte B? Un plan Medicare Advantage necesita las dos.",
+ ob_med_both:"Sí, las dos",ob_med_a:"Solo Parte A",ob_med_no:"Todavía no",
+ ob_med_a_note:"Anotado. La Parte B tiene que estar activa antes de que empiece el plan, así que lo marco en la solicitud y Humana lo verá contigo.",
+ ob_med_no_note:"Anotado. Sigo adelante y dejo la inscripción en pausa; Humana no puede iniciar el plan hasta que las Partes A y B estén activas.",
+ ob_q_zip:"¿En qué código postal vives? Los planes Medicare Advantage se venden condado por condado, así que esto define si este está disponible para ti.",
+ ob_zip_eg:"45202",ob_zip_again:"Necesito un código postal de cinco dígitos. ¿Cuál es?",
+ ob_zip_ok:"Buena noticia: {plan} se ofrece en {zip}.",
+ ob_q_sex:"¿Y tu sexo tal como aparece en tu credencial de Medicare o identificación?",
+ ob_q_tobacco:"¿Has consumido tabaco o nicotina en los últimos 12 meses? Esto es para la tarifa del seguro de vida, no para el plan de salud.",
+ ob_tob_no:"No",ob_tob_quit:"Lo dejé hace más de un año",ob_tob_yes:"Sí",
+ ob_amount_lead:"Ahora el seguro de vida. Puedes tomar desde {min} hacia arriba, en pasos de mil. Hasta {gi} no hay ninguna pregunta de salud: es el monto de emisión garantizada. Por encima de eso, Humana pide evidencia de asegurabilidad antes de que inicie la cobertura adicional. El tope aquí es {max}.",
+ ob_q_amount:"¿Cuánta cobertura quieres?",ob_per_month:"/mes",ob_amount_other:"Otro monto",
+ ob_q_amount_other:"¿Cuánto? Lo que sea entre {min} y {max}, y lo redondeo al millar más cercano.",
+ ob_amount_ok:"{amt}, listo: se cotiza en {prem} al mes a tu edad, con descuento de nómina.",
+ ob_amount_eoi:"Como eso pasa el monto de emisión garantizada de {gi}, la parte de arriba necesita evidencia de asegurabilidad. Tus respuestas de ahorita definen si es una revisión corta o una más larga.",
+ ob_q_bene:"¿A quién debe ir el beneficio? Con nombre y apellido basta.",
+ ob_bene_eg:"Usar Maya Rivera",ob_bene_eg_val:"Maya Rivera",
+ ob_q_rel:"Y {who} es tu…",
+ ob_rel_spouse:"Cónyuge",ob_rel_child:"Hijo o hija",ob_rel_parent:"Madre o padre",ob_rel_other:"Otra persona",
+ ob_hra_intro:"Con eso queda el papeleo. Ahora la evaluación de riesgo de salud. Humana se la pide a cada miembro nuevo: así organizan tu atención y tu apoyo, y nunca cambia lo que pagas por el plan de salud. Las mismas respuestas sirven para la solicitud de vida.",
+ ob_hra_pre:"Esto ya lo saqué de tu expediente, así que déjalo tal cual a menos que algo haya cambiado: {list}.",
+ ob_hra_go_q:"¿Lista o listo?",ob_hra_go:"Adelante",
+ ob_h_health:"En general, ¿cómo dirías que está tu salud?",
+ ob_hs_ex:"Excelente",ob_hs_vg:"Muy buena",ob_hs_good:"Buena",ob_hs_fair:"Regular",ob_hs_poor:"Mala",
+ ob_h_cond:"¿Cuáles de estas te ha dicho un médico que tienes? Toca todas las que apliquen y luego Listo.",
+ ob_c_diabetes:"Diabetes",ob_c_bp:"Presión alta",ob_c_chol:"Colesterol alto",ob_c_heart:"Problema del corazón",
+ ob_c_lung:"Asma o EPOC",ob_c_joint:"Artritis o dolor articular",ob_c_kidney:"Enfermedad renal",ob_c_mood:"Depresión o ansiedad",ob_c_none:"Ninguna de estas",
+ ob_pick_done:"Listo ({n})",
+ ob_h_meds:"¿Cuántos medicamentos con receta tomas de forma regular?",
+ ob_m_0:"Ninguno",ob_m_13:"De 1 a 3",ob_m_47:"De 4 a 7",ob_m_8:"8 o más",
+ ob_h_meds2:"¿Alguna vez te cuesta pagarlos o se te olvida tomarlos?",
+ ob_never:"Nunca",ob_sometimes:"A veces",ob_often:"Seguido",
+ ob_h_hosp:"En los últimos 12 meses, ¿cuántas veces te quedaste a dormir en el hospital o fuiste a urgencias?",
+ ob_hp_0:"Ninguna",ob_hp_1:"Una vez",ob_hp_2:"Dos veces",ob_hp_3:"Tres o más",
+ ob_h_falls:"¿Te has caído en los últimos 12 meses?",
+ ob_f_0:"No me he caído",ob_f_1:"Una vez",ob_f_2:"Dos o más",ob_f_worry:"No, pero me preocupa",
+ ob_h_adl:"¿Necesitas ayuda de otra persona con alguna de estas? Toca todas las que apliquen.",
+ ob_adl_bath:"Bañarte",ob_adl_dress:"Vestirte",ob_adl_meals:"Preparar comidas",ob_adl_around:"Moverte en casa",ob_adl_transport:"Llegar a tus citas",ob_adl_none:"Ninguna de estas",
+ ob_h_pain:"¿Cuánto dolor corporal has tenido en la última semana?",
+ ob_p_none:"Nada",ob_p_mild:"Leve",ob_p_mod:"Moderado",ob_p_sev:"Fuerte",
+ ob_h_mood1:"En las últimas dos semanas, ¿con qué frecuencia has sentido poco interés o placer en hacer cosas?",
+ ob_h_mood2:"Y en las últimas dos semanas, ¿con qué frecuencia te has sentido decaída o decaído, deprimido o sin esperanza?",
+ ob_phq_0:"Para nada",ob_phq_1:"Varios días",ob_phq_2:"Más de la mitad de los días",ob_phq_3:"Casi todos los días",
+ ob_mood_care:"Gracias por responder eso con honestidad; no es una pregunta fácil. Lo que describes es común y tiene tratamiento, y no afecta en nada tu cobertura.",
+ ob_mood_care2:"Voy a poner apoyo de salud emocional en tu lista para que alguien del plan te busque. Si prefieres no esperar, tu médico es una buena primera llamada. Y si en algún momento se siente más pesado de lo que puedes manejar, dile ese mismo día a alguien de tu confianza.",
+ ob_h_active:"¿Cuántos días de una semana típica haces al menos 30 minutos de actividad física?",
+ ob_a_0:"Ninguno",ob_a_12:"1 o 2",ob_a_34:"3 o 4",ob_a_5:"5 o más",
+ ob_h_food:"En los últimos 12 meses, ¿llegaste a preocuparte de que se acabara la comida antes de tener dinero para comprar más?",
+ ob_h_ride:"¿Se te complica llegar a tus citas médicas? Sin quién te lleve, sin transporte, muy lejos.",
+ ob_r_no:"No, sin problema",ob_r_some:"A veces",ob_r_often:"Seguido",
+ ob_h_prev:"¿Cuáles de estas te has hecho en el último año o dos? Toca todas las que apliquen.",
+ ob_prev_flu:"Vacuna de la gripe",ob_prev_colon:"Prueba de colon",ob_prev_dental:"Consulta dental",ob_prev_eye:"Examen de la vista",ob_prev_none:"Ninguna de estas",
+ ob_h_support:"Última. Si estuvieras mal unos días, ¿hay alguien que pudiera ayudarte?",
+ ob_s_family:"Sí, familia cerca",ob_s_friend:"Sí, un amigo o vecino",ob_s_none:"Nadie de forma regular",
+ ob_after:"Queda guardado en Mis archivos. Ábrelo, compártelo con quien necesite una copia, o pregúntame lo que siga sin quedar claro.",
+ ob_working:"Eso es todo. Dame un momento para armar tu solicitud y escribir tu resumen.",
+ ob_fact_life:"de vida",ob_upd:"Alta con Humana completada",
+ ob_card_h:"Tu solicitud",ob_card_sub:"Solicitud {app} · preparada por ELIA",
+ ob_na:"Todavía no",ob_tile_health:"Prima del plan de salud, además de tu prima de la Parte B.",
+ ob_tile_life:"Cobertura de vida vigente al iniciar el plan.",ob_tile_prem:"Prima de vida, con descuento de nómina.",
+ ob_card_dec:"Cómo quedó",
+ ob_dec_health_ok:"Plan de salud: inscrito, inicia el {d}.",
+ ob_dec_health_pend:"Plan de salud: en pausa hasta que tu Parte B de Medicare esté activa.",
+ ob_dec_health_notyet:"Plan de salud: no disponible hasta que califiques para Medicare. Ya lo dejé anotado.",
+ ob_dec_life_ok:"Seguro de vida: aprobado por {amt}, sin más preguntas.",
+ ob_dec_life_ref:"Seguro de vida: {amt} aprobados ahora; los {rest} restantes pasan a revisión corta con un suscriptor.",
+ ob_card_prog:"Lo que te dejé agendado",
+ ob_filemeta:"Resumen de cobertura · PDF · {kb} KB · guardado en Mis archivos",
+ ob_sample_note:"Esto es una demostración. No se envió ninguna solicitud a Humana y el documento está marcado como muestra.",
+ ob_sample_short:"Documento de muestra · nada enviado",
+ ob_open:"Abrir el resumen",ob_share:"Compartir",ob_hq:"Verlo en Mis archivos",ob_again:"Empezar otra solicitud",
+ ob_finish:"Eso es todo",ob_bye:"Perfecto. Todo queda en Mis archivos, y aquí estoy si surge algo.",
+ ob_share_text:"Mi resumen de cobertura Humana, de ELIA",
+ ob_ask_lead:"Pregunta lo que quieras: qué cubre, qué cuesta o cómo pedir ayuda.",
+ ob_eg1:"¿Cuánto pago por ver a un especialista?",ob_eg2:"¿Mi dentista está cubierto?",ob_eg3:"¿Qué pasa si voy fuera de la red?",
+ ob_ask_back:"Volver a la solicitud",ob_ask_more:"Preguntar otra cosa",
+ ob_file_sub:"Solicitud {app}",ob_file_health:"Plan de salud",ob_file_from:"desde el {d}",ob_file_life:"Seguro de vida",ob_file_bene:"Beneficiario",
+ ob_prog_chronic:"Manejo de condiciones crónicas",
+ ob_prog_falls:"Prevención de caídas y revisión de la casa",
+ ob_prog_behav:"Apoyo de salud emocional",
+ ob_prog_food:"Apoyo con alimentos y recursos comunitarios",
+ ob_prog_ride:"Apoyo para llegar a tus citas",
+ ob_prog_move:"Recompensas de actividad Go365",
+ ob_prog_pharm:"Revisión de medicamentos con un farmacéutico",
+ ob_prog_prev:"Ponerte al día con pruebas preventivas",
+ ob_prog_pain:"Referencia para manejo del dolor",
+ ob_progb_chronic:"Una enfermera gestora sigue tus condiciones entre consultas y te ayuda a no perder citas ni estudios.",
+ ob_progb_falls:"Una revisión corta de equilibrio y riesgos en casa, porque una caída es lo que más fácil descarrila un buen año.",
+ ob_progb_behav:"Una llamada del equipo de salud emocional del plan, que puede gestionar terapia o remitirte con tu propio médico, lo que prefieras.",
+ ob_progb_food:"Una referencia a recursos de alimentos y a los programas comunitarios con los que trabaja el plan en tu zona.",
+ ob_progb_ride:"Apoyo para gestionar traslados a tus citas, para que una consulta perdida no se vuelva un problema mayor.",
+ ob_progb_move:"Go365 te premia por la actividad de todos los días. Es la parte del plan de la que más fácil sacas provecho.",
+ ob_progb_pharm:"Un farmacéutico revisa todo lo que tomas junto, busca choques y simplifica el horario donde se pueda.",
+ ob_progb_prev:"Una lista recordatorio de las pruebas que te tocan, casi todas sin costo en este plan.",
+ ob_progb_pain:"Una referencia para hablar del manejo del dolor, para que se trate y no se aguante.",
+ ob_fb_overview:"{plan} es un PPO regional Medicare Advantage con cobertura de medicamentos de la Parte D, así que sustituye a Medicare Original y le suma. Cuesta {prem} al mes además de tu prima de la Parte B, y lo máximo que pagarías en la red por atención médica en un año es {moop}. Incluye dental, vista y audición, y Go365 premia la actividad saludable. Junto con eso estás solicitando {life}, una cobertura aparte que le paga a tu beneficiario.",
+ ob_fb_dental:"Los exámenes bucales, radiografías, limpiezas y periodoncia son $0 en la red de este plan. Endodoncia, restauraciones, implantes, ortodoncia y cirugía oral no están cubiertos. Si tu dentista está en la red depende de tu zona, así que conviene revisarlo antes de agendar.",
+ ob_fb_vision:"El examen de la vista de rutina es $0 en la red, igual que los lentes de contacto o unos anteojos con armazón y micas juntos. El armazón solo o las micas solas no están cubiertos.",
+ ob_fb_hearing:"Los exámenes y adaptaciones auditivas son $0 en la red. Los auxiliares auditivos con receta cuestan de $499 a $725 cada uno. Los de venta libre no están cubiertos en este plan.",
+ ob_fb_drug:"La Parte D de este plan tiene un deducible de {ded} y luego pagas el 25 por ciento del costo de genéricos y de marca en farmacia. Lo que pagas por medicamentos cubiertos tiene un tope de unos {cap} al año. Hay entrega a domicilio con CenterWell Pharmacy.",
+ ob_fb_visit:"La consulta de primer contacto es {pcp} en la red, el especialista {spec} y urgencias hospitalarias {er}. La atención de urgencia sale más barata que urgencias del hospital, así que úsala cuando se pueda.",
+ ob_fb_cost:"La prima del plan es {prem} al mes, además de lo que pagues por la Parte B de Medicare. Lo máximo que pagarías en la red en un año por atención médica es {moop}.",
+ ob_fb_network:"Es un PPO regional, así que puedes ver proveedores fuera de la red mientras acepten Medicare; solo pagas una parte mayor. Dentro de la red siempre sale más barato, y tu tope anual es el de la red.",
+ ob_fb_life:"Hasta {gi} no hay preguntas de salud. Por encima, Humana pide evidencia de asegurabilidad antes de que inicie la cobertura adicional. El tope es {max}, y la cobertura sigue siendo tuya si dejas el grupo, siempre que la portes antes de los 70.",
+ ob_fb_hra:"La evaluación de riesgo de salud es como el plan define qué atención y qué apoyo organizarte. No cambia tu prima y no puede usarse para negarte el plan de salud.",
+ ob_fb_default:"Esa no la puedo resolver con los materiales del plan que tengo. Servicios para miembros de Humana sí: {tel}, TTY {tty}, de 8 a. m. a 8 p. m. hora local, los siete días.",
+ ob_pdf_sample_foot:"Documento de muestra, no es una póliza de Humana",
+ ob_pdf_eyebrow:"Resumen de cobertura",ob_pdf_title:"Tu cobertura Humana, en un solo lugar",
+ ob_pdf_lead:"Preparado para {name} por ELIA. Cubre la inscripción al plan de salud {plan} de {carrier} y una solicitud de seguro de vida a término voluntario de Humana.",
+ ob_pdf_banner:"Solo demostración. No se envió ninguna solicitud y esto no es un documento de póliza.",
+ ob_pdf_s1:"Prima mensual del plan de salud, además de la prima de la Parte B.",
+ ob_pdf_s2:"Cobertura de vida vigente al iniciar el plan.",
+ ob_pdf_s3:"Prima de vida al mes, con descuento de nómina.",
+ ob_pdf_app:"Solicitud",ob_pdf_name:"Nombre",ob_pdf_dob:"Fecha de nacimiento",ob_pdf_age:"{age} años",ob_pdf_zip:"Código postal",
+ ob_pdf_medicare:"Medicare",ob_pdf_date:"Preparado",ob_pdf_f_cover:"Resumen de cobertura",
+ ob_pdf_e_health:"Plan de salud",ob_pdf_h_health:"Qué tienes y cuánto cuesta",
+ ob_pdf_enrolled_lead:"Inscrito.",ob_pdf_enrolled:"Quedas inscrito en {plan}, con inicio el {d}. Tu referencia de miembro en esta muestra es {id}; una credencial real llegaría antes de la fecha de inicio.",
+ ob_pdf_pending_lead:"En pausa.",ob_pdf_pending:"Tu inscripción no puede iniciar hasta que la Parte B de Medicare esté activa. Todo lo demás está listo y esperando ese paso.",
+ ob_pdf_notyet_lead:"Aún no disponible.",ob_pdf_notyet:"{plan} es un plan Medicare Advantage, así que se abre para ti cuando califiques para Medicare. Tu seguro de vida no se ve afectado.",
+ ob_pdf_whatyoupay:"Qué pagas",ob_pdf_mo:" al mes",
+ ob_pdf_premium:"Prima del plan",ob_pdf_premium_n:"Además de tu prima de la Parte B de Medicare.",
+ ob_pdf_moop:"Tope anual dentro de la red",ob_pdf_moop_n:"Lo máximo que pagas al año por atención médica cubierta.",
+ ob_pdf_pcp:"Consulta de primer contacto, en la red",ob_pdf_spec:"Consulta con especialista, en la red",
+ ob_pdf_urgent:"Atención de urgencia",ob_pdf_er:"Urgencias hospitalarias",
+ ob_pdf_inpatient:"Hospitalización",ob_pdf_inpatient_v:"{a} al día los días 1 a {n}, luego $0 al día hasta el día 90",
+ ob_pdf_snf:"Centro de enfermería especializada",ob_pdf_snf_v:"$0 al día los días 1 a {n}, luego {a} al día los días 21 a 100",
+ ob_pdf_rx:"Medicamentos con receta (Parte D)",ob_pdf_rx_v:"{ded} de deducible, luego {pct}% del costo",
+ ob_pdf_rx_n:"Lo que pagas por medicamentos cubiertos tiene un tope de unos {cap} al año.",
+ ob_pdf_f_health:"Plan de salud",
+ ob_pdf_e_extras:"Extras",ob_pdf_h_extras:"Lo que la gente olvida que tiene",
+ ob_pdf_dental:"Dental",ob_pdf_dental_b:"Exámenes bucales, radiografías, limpiezas y periodoncia a $0 en la red. Endodoncia, restauraciones, implantes, ortodoncia y cirugía oral no están cubiertos.",
+ ob_pdf_vision:"Vista",ob_pdf_vision_b:"Examen de la vista de rutina, lentes de contacto y anteojos con armazón y micas juntos, todo a $0 en la red. Armazón solo o micas solas no están cubiertos.",
+ ob_pdf_hearing:"Audición",ob_pdf_hearing_b:"Exámenes y adaptaciones a $0 en la red. Auxiliares auditivos con receta de {lo} a {hi}. Los de venta libre no están cubiertos.",
+ ob_pdf_go365:"Go365 y farmacia",ob_pdf_go365_b:"Go365 premia la actividad saludable de todos los días. CenterWell Pharmacy entrega tus medicamentos de mantenimiento en casa.",
+ ob_pdf_network:"Red",
+ ob_pdf_network_b:"Es un PPO regional. Puedes ver proveedores fuera de la red mientras acepten Medicare, y pagas una parte mayor cuando lo haces. El tope anual de arriba aplica a la atención dentro de la red, así que quedarte en la red es lo que protege ese límite.",
+ ob_pdf_notcov_lead:"Vale la pena saber:",ob_pdf_notcov:"Este plan no incluye asignación para productos de venta libre, y el pedido por correo del plan aparece como próximamente. Los beneficios varían por condado y por año del plan; la Evidencia de Cobertura que te envía Humana es el documento que rige.",
+ ob_pdf_e_life:"Seguro de vida",ob_pdf_h_life:"Lo que recibiría tu familia",
+ ob_pdf_life_ok_lead:"Aprobado.",ob_pdf_life_ok:"{amt} de cobertura, a {prem} al mes con descuento de nómina, sin más preguntas de salud.",
+ ob_pdf_life_ref_lead:"Aprobado en parte.",ob_pdf_life_ref:"{amt} quedan aprobados ahora, que es el monto de emisión garantizada de {gi}. Los {rest} restantes pasan con un suscriptor, que pedirá evidencia de asegurabilidad antes de que esa parte inicie.",
+ ob_pdf_product:"Producto",ob_pdf_requested:"Monto solicitado",ob_pdf_inforce:"Monto vigente",
+ ob_pdf_pending_amt:"{rest} pendientes de evidencia de asegurabilidad.",
+ ob_pdf_rate:"Prima",ob_pdf_rate_n:"Con base en ${r} por cada $1,000 de cobertura al mes en tu rango de edad.",
+ ob_pdf_bene:"Beneficiario",ob_pdf_tobacco:"Tabaco en los últimos 12 meses",
+ ob_pdf_included:"Lo que viene incluido",
+ ob_pdf_inc1:"Muerte accidental y desmembramiento, con cobertura de transporte público, y beneficios por cinturón, bolsa de aire y casco, más un beneficio por coma del {pct}% hasta {max}.",
+ ob_pdf_inc2:"Un beneficio por muerte acelerada en caso de enfermedad terminal, que paga del 50 al 80 por ciento del monto, hasta {max}.",
+ ob_pdf_inc3:"Exención de prima si quedas con discapacidad {n} meses seguidos antes de los {age} años.",
+ ob_pdf_inc4:"Portabilidad si dejas el grupo, antes de los {age} años, y conversión a una póliza individual de vida entera.",
+ ob_pdf_inc5:"Opción de aumento anual de hasta {amt} por año en el aniversario del plan.",
+ ob_pdf_inc6:"El monto se reduce según un calendario que empieza a los {age} años.",
+ ob_pdf_f_life:"Seguro de vida",
+ ob_pdf_e_hra:"Evaluación de riesgo de salud",ob_pdf_h_hra:"Lo que nos contaste",
+ ob_pdf_hra_lead:"Estas respuestas se usan para organizar tu atención y tu apoyo. No cambian lo que pagas por el plan de salud y no pueden usarse para negarte el plan.",
+ ob_pdf_conds:"Condiciones",ob_pdf_meds:"Medicamentos con receta · dificultad para tomarlos o pagarlos",
+ ob_pdf_hosp:"Hospital o urgencias, últimos 12 meses",ob_pdf_falls:"Caídas en los últimos 12 meses",
+ ob_pdf_adl:"Necesita ayuda con",ob_pdf_pain:"Dolor en la última semana",
+ ob_pdf_mood:"Tamizaje de ánimo (PHQ-2)",ob_pdf_mood_v:"{n} de 6",ob_pdf_mood_n:"3 o más sugiere que vale la pena una conversación más larga.",
+ ob_pdf_active:"Días activos por semana",ob_pdf_active_v:"{n} días",
+ ob_pdf_food:"Falta de comida · llegar a las citas",
+ ob_pdf_helper:"Alguien que podría ayudar",
+ ob_pdf_prev:"Atención preventiva en el último año o dos",ob_pdf_support:"Alguien que podría ayudar",
+ ob_pdf_f_hra:"Evaluación de riesgo de salud",
+ ob_pdf_e_next:"Sigue",ob_pdf_h_next:"Qué pasa ahora",
+ ob_pdf_todo:"Lo que te toca",
+ ob_pdf_todo_eoi:"Llena el formulario de evidencia de asegurabilidad que te envía Humana por la cobertura de vida que pasa del monto de emisión garantizada. La parte aprobada no se detiene por eso.",
+ ob_pdf_todo_noeoi:"No hace falta nada más para tu seguro de vida. Mantén al día a tu beneficiario si cambian tus circunstancias.",
+ ob_pdf_todo_card:"Está pendiente de tu credencial de miembro antes del {d}, y llévala a cada cita.",
+ ob_pdf_todo_pcp:"Elige un médico de primer contacto y agenda la primera consulta dentro del primer mes, mientras estés bien. Es una primera cita mucho mejor que una hecha con prisa.",
+ ob_pdf_todo_rx:"Pasa tus medicamentos de mantenimiento a entrega a domicilio con CenterWell y pide la revisión con el farmacéutico.",
+ ob_pdf_support_lead:"Si necesitas a una persona:",ob_pdf_support:"Servicios para miembros e inscripción de Humana, {tel}, TTY {tty}, de 8 a. m. a 8 p. m. hora local, los siete días. Para cualquier cosa clínica y urgente, primero tu médico o los servicios de emergencia.",
+ ob_pdf_disclaimer:"Preparado por ELIA para Prime Health como demostración. No se envió ninguna solicitud a {carrier} y esto no es un documento de póliza, una oferta de seguro ni un estado de beneficios. Las cifras del plan provienen de materiales publicados de {plan} y del folleto de los planes de vida de Humana; el monto de emisión garantizada y las tarifas mostradas son un esquema de demostración. Los beneficios varían por condado y año del plan. La Evidencia de Cobertura y el certificado de seguro que emite Humana son los documentos que rigen.",
+ ob_pdf_f_next:"Siguientes pasos"});
+
+/* Arabic: chat strings only. The base-14 PDF fonts have no Arabic glyphs, so the
+   summary document is written in English and the chat says so. Any ob_pdf_* key
+   falls back to English through t(). */
+Object.assign(L.ar,{
+ ob_voice_start:"فتحت ذلك لك في المحادثة. انظر إلى الشاشة ولنمضِ فيه معًا.",ob_voice_ok:"تمام.",
+ p_onboard:"تسجيل خطتي",file_ob:"ملخص تغطية Humana",ph_ob:"تسجيل الخطة · Humana",
+ ob_step:"السؤال {n} من {of}",ob_ask_btn:"اسأل عن الخطة",ob_back:"حسنًا، لنعد إلى طلبك.",ob_skip:"أفضّل عدم الإجابة",
+ ob_prefill:"لدي هذه المعلومة من ملفك، فقط أكّدها.",
+ ob_intro:"لنسجّلك يا {name}. هذا منفصل عن الخطة اليومية التي نعمل عليها معًا، فلا شيء هنا يغيّر أهدافك أو نتيجتك.",
+ ob_intro2:"أمران في جلسة واحدة: تنضم إلى خطة Humana الصحية، وتتقدّم بطلب تأمين Humana على الحياة لأجل محدد. تقييم واحد للمخاطر الصحية يغطي الاثنين، فتجيب مرة واحدة. لا يُرسل شيء إلى Humana، لكن كل رقم أذكره مأخوذ من مواد الخطة نفسها.",
+ ob_consent_q:"نحو خمس دقائق، ويمكنك التوقف أو سؤالي عن أي شيء أثناء ذلك. هل أستخدم ما هو موجود في ملفك حتى لا تعيد كتابته؟",
+ ob_consent_yes:"نعم، لنبدأ",ob_what_btn:"أولًا، ما هذه الخطة؟",ob_not_now:"ليس الآن",
+ ob_what_q:"ما هي خطة Humana هذه وما الذي تغطيه؟",
+ ob_later:"لا مشكلة. ستجدها في الإجراءات السريعة متى شئت، أو قل لي فقط «سجّل خطتي».",
+ ob_q_name:"ما الاسم الذي سيظهر في الطلب؟ اسمك القانوني الكامل كما في بطاقة Medicare أو هويتك.",
+ ob_use_name:"استخدم {name}",
+ ob_q_dob:"ما تاريخ ميلادك؟ اليوم والشهر والسنة يكفي.",
+ ob_dob_eg:"14 مارس 1959",ob_dob_again:"لم أتمكن من قراءة تاريخ في ذلك. جرّب مثل 14 مارس 1959، أو 1959-03-14.",
+ ob_dob_ok:"شكرًا. هذا يعني أن عمرك {age}، إذًا أنت مؤهل لخطة Medicare Advantage.",
+ ob_under65:"شكرًا. في عمر {age} لست مؤهلًا لـ Medicare بعد، و{plan} خطة Medicare، لذا لا أستطيع تسجيلك فيها اليوم. أما تأمين الحياة فأمر مختلف: تأمين Humana على الحياة لأجل محدد لا علاقة له بـ Medicare، ويمكنني أن آخذك خلاله الآن.",
+ ob_under65_q:"هل نكمل طلب تأمين الحياة؟",
+ ob_under65_yes:"نعم، لنكمل",ob_under65_no:"لنتركه الآن",
+ ob_q_medicare:"هل أنت مسجّل في Medicare الجزء A والجزء B؟ خطة Medicare Advantage تحتاج الاثنين.",
+ ob_med_both:"نعم، الاثنان",ob_med_a:"الجزء A فقط",ob_med_no:"ليس بعد",
+ ob_med_a_note:"سجّلت ذلك. يجب أن يكون الجزء B فعّالًا قبل أن تبدأ الخطة، لذا سأشير إليه في الطلب وستتابعه Humana معك.",
+ ob_med_no_note:"سجّلت ذلك. سأكمل وأضع التسجيل قيد الانتظار؛ لا تستطيع Humana بدء الخطة قبل تفعيل الجزأين A وB.",
+ ob_q_zip:"ما الرمز البريدي الذي تسكن فيه؟ تُباع خطط Medicare Advantage حسب المقاطعة، وهذا يحدد ما إذا كانت هذه الخطة متاحة لك.",
+ ob_zip_eg:"45202",ob_zip_again:"أحتاج رمزًا بريديًا من خمسة أرقام. ما هو؟",
+ ob_zip_ok:"خبر جيد: {plan} متاحة في {zip}.",
+ ob_q_sex:"وما جنسك كما هو مسجّل في بطاقة Medicare أو هويتك؟",
+ ob_q_tobacco:"هل استخدمت التبغ أو النيكوتين خلال الاثني عشر شهرًا الماضية؟ هذا السؤال لسعر تأمين الحياة، لا للخطة الصحية.",
+ ob_tob_no:"لا",ob_tob_quit:"أقلعت قبل أكثر من سنة",ob_tob_yes:"نعم",
+ ob_amount_lead:"الآن تأمين الحياة. يمكنك اختيار من {min} فما فوق بخطوات ألف. حتى {gi} لا توجد أي أسئلة صحية؛ هذا مبلغ الإصدار المضمون. وفوق ذلك تطلب Humana دليلًا على القابلية للتأمين قبل بدء التغطية الإضافية. والحد الأقصى هنا {max}.",
+ ob_q_amount:"كم مبلغ التغطية الذي تريده؟",ob_per_month:"/شهريًا",ob_amount_other:"مبلغ آخر",
+ ob_q_amount_other:"كم؟ أي مبلغ بين {min} و{max}، وسأقرّبه إلى أقرب ألف.",
+ ob_amount_ok:"{amt}، تمام — يُسعَّر عند {prem} شهريًا في عمرك، بخصم من الراتب.",
+ ob_amount_eoi:"بما أن ذلك يتجاوز مبلغ الإصدار المضمون {gi}، يحتاج الجزء الزائد دليلًا على القابلية للتأمين. إجاباتك بعد قليل تحدد إن كانت مراجعة قصيرة أم أطول.",
+ ob_q_bene:"لمن يذهب المبلغ؟ الاسم واللقب يكفيان.",
+ ob_bene_eg:"استخدم مايا ريفيرا",ob_bene_eg_val:"مايا ريفيرا",
+ ob_q_rel:"و{who} هو/هي…",
+ ob_rel_spouse:"الزوج أو الزوجة",ob_rel_child:"ابن أو ابنة",ob_rel_parent:"أحد الوالدين",ob_rel_other:"شخص آخر",
+ ob_hra_intro:"انتهت الأوراق. الآن تقييم المخاطر الصحية. تطلبه Humana من كل عضو جديد: به يرتبون رعايتك ودعمك، ولا يغيّر أبدًا ما تدفعه للخطة الصحية. وتصلح الإجابات نفسها لطلب تأمين الحياة.",
+ ob_hra_pre:"أخذت هذا من سجلك، فاتركه كما هو إلا إذا تغيّر شيء: {list}.",
+ ob_hra_go_q:"جاهز؟",ob_hra_go:"هيا بنا",
+ ob_h_health:"بشكل عام، كيف تصف صحتك؟",
+ ob_hs_ex:"ممتازة",ob_hs_vg:"جيدة جدًا",ob_hs_good:"جيدة",ob_hs_fair:"مقبولة",ob_hs_poor:"ضعيفة",
+ ob_h_cond:"أي من هذه قال لك طبيب إنك مصاب بها؟ اختر كل ما ينطبق ثم تم.",
+ ob_c_diabetes:"السكري",ob_c_bp:"ارتفاع ضغط الدم",ob_c_chol:"ارتفاع الكوليسترول",ob_c_heart:"مشكلة في القلب",
+ ob_c_lung:"الربو أو الانسداد الرئوي",ob_c_joint:"التهاب المفاصل أو ألم المفاصل",ob_c_kidney:"مرض الكلى",ob_c_mood:"الاكتئاب أو القلق",ob_c_none:"لا شيء من هذه",
+ ob_pick_done:"تم ({n})",
+ ob_h_meds:"كم دواءً بوصفة طبية تتناول بانتظام؟",
+ ob_m_0:"لا شيء",ob_m_13:"من 1 إلى 3",ob_m_47:"من 4 إلى 7",ob_m_8:"8 أو أكثر",
+ ob_h_meds2:"هل تجد أحيانًا صعوبة في دفع ثمنها أو في تذكّر تناولها؟",
+ ob_never:"أبدًا",ob_sometimes:"أحيانًا",ob_often:"كثيرًا",
+ ob_h_hosp:"خلال الاثني عشر شهرًا الماضية، كم مرة بتّ في المستشفى أو ذهبت إلى الطوارئ؟",
+ ob_hp_0:"ولا مرة",ob_hp_1:"مرة",ob_hp_2:"مرتين",ob_hp_3:"ثلاث أو أكثر",
+ ob_h_falls:"هل سقطت خلال الاثني عشر شهرًا الماضية؟",
+ ob_f_0:"لم أسقط",ob_f_1:"مرة",ob_f_2:"مرتين أو أكثر",ob_f_worry:"لا، لكنني قلق من ذلك",
+ ob_h_adl:"هل تحتاج مساعدة من شخص آخر في أي من هذه؟ اختر كل ما ينطبق.",
+ ob_adl_bath:"الاستحمام",ob_adl_dress:"ارتداء الملابس",ob_adl_meals:"تحضير الطعام",ob_adl_around:"التنقل داخل البيت",ob_adl_transport:"الوصول إلى المواعيد",ob_adl_none:"لا شيء من هذه",
+ ob_h_pain:"كم كان الألم الجسدي لديك في الأسبوع الماضي؟",
+ ob_p_none:"لا ألم",ob_p_mild:"خفيف",ob_p_mod:"متوسط",ob_p_sev:"شديد",
+ ob_h_mood1:"خلال الأسبوعين الماضيين، كم مرة شعرت بقلة الاهتمام أو المتعة في فعل الأشياء؟",
+ ob_h_mood2:"وخلال الأسبوعين الماضيين، كم مرة شعرت بالإحباط أو الاكتئاب أو فقدان الأمل؟",
+ ob_phq_0:"إطلاقًا",ob_phq_1:"عدة أيام",ob_phq_2:"أكثر من نصف الأيام",ob_phq_3:"تقريبًا كل يوم",
+ ob_mood_care:"شكرًا لصراحتك في هذا السؤال، فهو ليس سهلًا. ما وصفته شائع وقابل للعلاج، ولا يؤثر إطلاقًا على تغطيتك.",
+ ob_mood_care2:"سأضيف دعم الصحة النفسية إلى قائمتك ليتواصل معك أحد من الخطة. وإن كنت تفضّل ألا تنتظر، فطبيبك اتصال أول جيد. وإذا شعرت يومًا أن الأمر أثقل مما تحتمل، أخبر شخصًا تثق به في اليوم نفسه.",
+ ob_h_active:"كم يومًا في الأسبوع المعتاد تمارس 30 دقيقة على الأقل من النشاط البدني؟",
+ ob_a_0:"ولا يوم",ob_a_12:"يوم أو يومان",ob_a_34:"3 أو 4",ob_a_5:"5 أو أكثر",
+ ob_h_food:"خلال الاثني عشر شهرًا الماضية، هل قلقت يومًا أن ينفد الطعام قبل أن تملك مالًا لشراء المزيد؟",
+ ob_h_ride:"هل يصعب عليك أحيانًا الوصول إلى المواعيد الطبية؟ لا من يوصلك، أو لا مواصلات، أو المسافة بعيدة.",
+ ob_r_no:"لا، الأمر ميسّر",ob_r_some:"أحيانًا",ob_r_often:"كثيرًا",
+ ob_h_prev:"أي من هذه أجريتها خلال السنة أو السنتين الماضيتين؟ اختر كل ما ينطبق.",
+ ob_prev_flu:"لقاح الإنفلونزا",ob_prev_colon:"فحص القولون",ob_prev_dental:"زيارة أسنان",ob_prev_eye:"فحص نظر",ob_prev_none:"لا شيء من هذه",
+ ob_h_support:"آخر سؤال. لو مرضت بضعة أيام، هل هناك من يستطيع مساعدتك؟",
+ ob_s_family:"نعم، أهلي قريبون",ob_s_friend:"نعم، صديق أو جار",ob_s_none:"لا أحد بانتظام",
+ ob_after:"محفوظ في ملفاتي. افتحه، أو شاركه مع من يحتاج نسخة، أو اسألني عن أي شيء ما زال غير واضح.",
+ ob_working:"هذا كل شيء. أمهلني لحظة لأجهّز طلبك وأكتب ملخصك.",
+ ob_fact_life:"تأمين حياة",ob_upd:"اكتمل التسجيل مع Humana",
+ ob_card_h:"طلبك",ob_card_sub:"الطلب {app} · أعدّته ELIA",
+ ob_na:"ليس بعد",ob_tile_health:"قسط الخطة الصحية، فوق قسط الجزء B.",
+ ob_tile_life:"تغطية الحياة السارية عند بدء الخطة.",ob_tile_prem:"قسط تأمين الحياة، بخصم من الراتب.",
+ ob_card_dec:"أين وصل الأمر",
+ ob_dec_health_ok:"الخطة الصحية: مسجّل، تبدأ في {d}.",
+ ob_dec_health_pend:"الخطة الصحية: قيد الانتظار حتى يُفعَّل الجزء B من Medicare.",
+ ob_dec_health_notyet:"الخطة الصحية: غير متاحة حتى تصبح مؤهلًا لـ Medicare. دوّنتها لوقتها.",
+ ob_dec_life_ok:"تأمين الحياة: موافَق عليه بمبلغ {amt}، دون أسئلة إضافية.",
+ ob_dec_life_ref:"تأمين الحياة: {amt} موافَق عليها الآن؛ و{rest} المتبقية تذهب إلى مُكتتِب لمراجعة قصيرة.",
+ ob_card_prog:"ما رتّبته لك",
+ ob_filemeta:"ملخص التغطية · PDF · {kb} كيلوبايت · محفوظ في ملفاتي",
+ ob_sample_note:"هذا عرض توضيحي. لم يُرسل أي طلب إلى Humana، والمستند مُعلَّم كعيّنة. وهو مكتوب بالإنجليزية لأن خطوط المستند لا تدعم العربية.",
+ ob_sample_short:"مستند عيّنة · لم يُرسل شيء · بالإنجليزية",
+ ob_open:"افتح الملخص",ob_share:"مشاركة",ob_hq:"اعرضه في ملفاتي",ob_again:"ابدأ طلبًا جديدًا",
+ ob_finish:"هذا كل شيء",ob_bye:"ممتاز. كل شيء في ملفاتي، وأنا هنا إن استجدّ أي أمر.",
+ ob_share_text:"ملخص تغطية Humana الخاص بي، من ELIA",
+ ob_ask_lead:"اسأل ما تشاء: ما المغطّى، وكم يكلّف، وكيف تطلب المساعدة.",
+ ob_eg1:"كم أدفع لزيارة أخصائي؟",ob_eg2:"هل طبيب أسناني مغطّى؟",ob_eg3:"ماذا يحدث إن ذهبت خارج الشبكة؟",
+ ob_ask_back:"العودة إلى الطلب",ob_ask_more:"اسأل شيئًا آخر",
+ ob_file_sub:"الطلب {app}",ob_file_health:"الخطة الصحية",ob_file_from:"من {d}",ob_file_life:"تأمين الحياة",ob_file_bene:"المستفيد",
+ ob_prog_chronic:"إدارة رعاية الحالات المزمنة",
+ ob_prog_falls:"الوقاية من السقوط وفحص سلامة المنزل",
+ ob_prog_behav:"دعم الصحة النفسية",
+ ob_prog_food:"مساعدة في الطعام وموارد المجتمع",
+ ob_prog_ride:"مساعدة في الوصول إلى المواعيد",
+ ob_prog_move:"مكافآت النشاط Go365",
+ ob_prog_pharm:"مراجعة الأدوية مع صيدلي",
+ ob_prog_prev:"استدراك الفحوص الوقائية",
+ ob_prog_pain:"إحالة لإدارة الألم",
+ ob_fb_overview:"{plan} هي خطة PPO إقليمية ضمن Medicare Advantage مع تغطية أدوية الجزء D، فهي تحل محل Medicare الأصلي وتضيف إليه. تكلفتها {prem} شهريًا فوق قسط الجزء B، وأقصى ما قد تدفعه داخل الشبكة للرعاية الطبية في السنة هو {moop}. وتشمل الأسنان والنظر والسمع، ويكافئ Go365 النشاط الصحي. وإلى جانبها تتقدّم بطلب {life}، وهي تغطية منفصلة تُدفع لمستفيدك.",
+ ob_fb_dental:"فحوص الفم والأشعة والتنظيف وعلاج اللثة بـ $0 داخل الشبكة في هذه الخطة. أما علاج العصب والحشوات والزراعة والتقويم وجراحة الفم فغير مغطاة. ووجود طبيب أسنانك داخل الشبكة يعتمد على منطقتك، فيستحسن التأكد قبل الحجز.",
+ ob_fb_vision:"فحص النظر الروتيني بـ $0 داخل الشبكة، وكذلك العدسات اللاصقة أو نظارة بإطار وعدسات معًا. الإطار وحده أو العدسات وحدها غير مغطاة.",
+ ob_fb_hearing:"فحوص السمع والتركيب بـ $0 داخل الشبكة. سماعات الأذن بوصفة تكلف من $499 إلى $725 للواحدة. سماعات البيع المباشر غير مغطاة في هذه الخطة.",
+ ob_fb_drug:"الجزء D في هذه الخطة فيه خصم {ded}، ثم تدفع 25 بالمئة من تكلفة الأدوية الجنيسة والتجارية في الصيدلية. وما تدفعه مقابل الأدوية المغطاة محدود بنحو {cap} في السنة. وتتوفر خدمة التوصيل من CenterWell Pharmacy.",
+ ob_fb_visit:"زيارة طبيب الرعاية الأولية {pcp} داخل الشبكة، والأخصائي {spec}، وقسم الطوارئ {er}. والرعاية العاجلة أرخص من الطوارئ، فاستخدمها متى أمكن.",
+ ob_fb_cost:"قسط الخطة {prem} شهريًا، فوق ما تدفعه للجزء B من Medicare. وأقصى ما قد تدفعه داخل الشبكة في السنة للرعاية الطبية هو {moop}.",
+ ob_fb_network:"إنها PPO إقليمية، فيمكنك زيارة مقدمين خارج الشبكة ما داموا يقبلون Medicare، وتدفع حصة أكبر فقط. داخل الشبكة أرخص دائمًا، والحد الأقصى السنوي هو حد الشبكة.",
+ ob_fb_life:"حتى {gi} لا توجد أسئلة صحية. وفوق ذلك تطلب Humana دليلًا على القابلية للتأمين قبل بدء التغطية الإضافية. والحد الأقصى {max}، وتبقى التغطية لك إن تركت المجموعة ما دمت تنقلها قبل سن 70.",
+ ob_fb_hra:"تقييم المخاطر الصحية هو كيف تحدد الخطة ما ترتّبه لك من رعاية ودعم. لا يغيّر قسطك ولا يمكن استخدامه لرفضك من الخطة الصحية.",
+ ob_fb_default:"لا أستطيع حسم ذلك من مواد الخطة التي لدي. خدمة أعضاء Humana تعرف: {tel}، الهاتف النصي {tty}، من 8 صباحًا إلى 8 مساءً بالتوقيت المحلي، سبعة أيام في الأسبوع."});
+
 /* ============ Prime Health AI Cover ============ */
 /* ============ Prime Health AI Cover (supplemental plan, simulated Stripe checkout) ============ */
 const AIC={price:29,currency:"OMR",usd:75,id:"prime_ai_cover_monthly",
@@ -4655,13 +5678,16 @@ ${memberContext()||"(nothing collected yet)"}
 Question: """${q}"""`,{modelTier:"default"});txt=(r&&r.text||"").trim()||null}catch(e){}}
     ty.remove();add("",txt?recMd(txt):`<p>${t("hq_noai")}</p>`);res()}));resumeFlow()}
 /* After an aside, return to the open question: re-ask it and restore its buttons */
-function resumeFlow(){if(S.coreDone&&!S.await){later(()=>{if(!repEl.children.length)coreReplies()});return}
+function resumeFlow(){if(obResume())return;
+  if(S.coreDone&&!S.await){later(()=>{if(!repEl.children.length)coreReplies()});return}
   if(!S.await&&S.curReplies){const q=S.curQ;bot(q&&q.length<240?`<p>${t("back_to_it")}</p><p>${esc(q)}</p>`:`<p>${t("back_to_it")}</p>`);restorePrompt();return}
   bot(t("back_to_it"),{delay:300});reprompt()}
 async function smartRoute(x,el){
   if(bypassSmart(x)){route(x,el);return}
   const opts=S.curReplies&&repEl.children.length?S.curReplies:null,isQ=Q_RE.test(x);
   if(opts){const b=S.await?strictMatch(x):vmMatchReply(x);if(b){pickReply([...repEl.children].indexOf(b),el,x);return}}
+  if(OB_RE.test(x)&&!S.ob&&!S.sim){maybeReact(el,x,null);obStart();return}
+  if(S.ob&&isQ&&(obActive()||obTopic(x))&&!S.sim){maybeReact(el,x,null);obAnswer(x);return}
   if(isQ&&INS_RE.test(x)&&insOn()&&!S.sim&&!["ins_insurer","ins_policy"].includes(S.await)){maybeReact(el,x,null);insAnswer(x);return}
   /* plain typed answers go straight through; only questions and button-only replies need understanding */
   if(!isQ&&(S.await||!opts)){route(x,el);return}
@@ -4691,6 +5717,7 @@ function route(x,el){
   if(!simEmergency(x)&&isRecQuestion(x)){S.record?recAsk(x):recOffer();restorePrompt();return}
   /* A symptom or emergency at any point in the conversation brings in Sim; ELIA resumes afterward */
   if(HAS_SIM&&(simEmergency(x)||detectSymptom(x)==="sim")){startSim(x);return}
+  if(OB_RE.test(x)&&!S.ob){obStart();return}
   if(SAFE_RE.test(x)){safety();return}
   if(WEAR_RE.test(x)&&!S.sim){wcOpen({src:"chat",next:S.await?reprompt:(S.coreDone?coreReplies:null)});return}
   if(detectSymptom(x)==="pick"){pickSymptom();return}
@@ -4708,7 +5735,11 @@ function route(x,el){
     case"sl_q3":{const m=x.match(/\d+(?:[.,]\d)?/);if(m){const h=parseFloat(m[0].replace(",","."));if(h>=2&&h<=14)return slOnQ3(h)}break}
     case"sl_wake":return slOnWake(x);
     case"ins_insurer":return onInsurer(x);case"ins_policy":return onPolicy(x);case"ins_q":return insAnswer(x);
+    case"ob_name":return obOnName(x);case"ob_dob":return obOnDob(x);case"ob_zip":return obOnZip(x);
+    case"ob_amount":return obOnAmount(x);case"ob_bene":return obOnBene(x);case"ob_q":return obAnswer(x);
   }
+  /* a question asked mid-journey is answered from the plan, then the journey picks up again */
+  if(S.ob&&Q_RE.test(x)&&(obActive()||obTopic(x))){obAnswer(x);return}
   if(sens){bot(t("r_"+sens));reprompt();return}
   if(topic){topicReply(topic);if(!S.coreDone)restorePrompt();return}
   bot(t("fallback"));reprompt()}
@@ -4849,6 +5880,7 @@ function qaStart(goal){setView("chat");gen++;chain=Promise.resolve();clearReplie
   S.goal=goal;setFact("goal",{k:"goal_"+goal},"src_chat","cf_conf");renderHQ();sys(t("qa_"+goal))}
 $("#pMealPlan").onclick=()=>{setView("chat");gen++;chain=Promise.resolve();clearReplies();S.await=null;S.curReplies=null;if(!S.name){loadPersona();S.langChosen=true}
   if(S.mealPlan){mpCard();later(mpReplies)}else mpBuild()};
+$("#pOnboard").onclick=()=>{obStart()};
 $("#pSleep").onclick=()=>{qaStart("sleep");S.sleepDone=false;S.sl={};S.slNext=S.plan?coreDone:profile;askSleep()};
 $("#pMove").onclick=()=>{qaStart(S.goal&&S.goal!=="sleep"&&S.goal!=="eat"?S.goal:"energy");if(!S.plan){S.plan=buildPlan("move",false);S.plan.status="accepted";S.plan.actions.forEach(a=>a.state="accepted")}else if(!getAct("move")){S.plan.actions.unshift(moveAction(20,"freq3"))}S.mv={};askInjury()};
 $("#pDiet").onclick=()=>{qaStart("eat");S.afterMeal=S.plan?()=>{S.kitchenOffered=false;afterMove()}:null;askMeal()};
