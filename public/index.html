@@ -134,6 +134,9 @@ h2,h3,h4,.big b,.brand b{font-family:var(--f-display)}
 .replies:empty{display:none}
 .replies button{border:1px solid color-mix(in srgb,var(--teal) 45%,transparent);background:var(--surface);color:var(--teal);border-radius:999px;padding:7px 14px;font-size:13.5px;font-weight:600;transition:background .15s,transform .15s}
 .replies button:hover{background:var(--mint)}
+.replies button[aria-pressed="true"]{background:var(--mint);border-color:var(--teal);font-weight:700}
+.replies button.go{background:var(--teal);color:#fff;border-color:var(--teal)}
+.replies button.go:hover{background:var(--teal);filter:brightness(1.08)}
 .replies button:active{transform:scale(.97)}
 .composer{display:flex;gap:6px;padding:8px 10px 12px;background:var(--chat-bg);align-items:center}
 .composer input{flex:1;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:10px 16px;font:inherit;color:var(--fg)}
@@ -3862,8 +3865,7 @@ async function obVoice(q){
     if(obNorm(P.noneLabel)===u||(/\bnone\b|\bninguna\b|^no$/.test(u)&&!sel.length)){
       const said=await obCollect(()=>P.none());return said+obChipHint()}
     const hits=P.keys.filter(k=>{const l=obNorm(P.lab(k));return l&&(u===l||u.includes(l))});
-    if(hits.length){hits.forEach(k=>{if(!sel.includes(k))sel.push(k)});
-      await obCollect(()=>{clearReplies();P.draw()});
+    if(hits.length){hits.forEach(k=>{if(!sel.includes(k))sel.push(k)});P.draw();
       return t("ob_ticked",{list:listJoin(hits.map(k=>P.lab(k)))})+obChipHint()}
     if(OB_DONE_RE.test(u)){const said=await obCollect(()=>sel.length?P.done():P.none());return said+obChipHint()}}
   let act=null;
@@ -4085,26 +4087,28 @@ function obH12(){obQ(t("ob_h_ride"),[["ob_r_no"],["ob_r_some"],["ob_r_often"]]
 function obH13(){obPick("prev",["flu","colon","dental","eye"],t("ob_h_prev"),t("ob_prev_none"),()=>obH14(),12)}
 function obH14(){obQ(t("ob_h_support"),[["ob_s_family"],["ob_s_friend"],["ob_s_none"]]
   .map(([k])=>[t(k),()=>{S.ob.h.support=k;obDecide()}]),{n:12})}
-/* a multi-select built out of the ordinary reply chips: tap to toggle, then Done */
+/* A real multi-select: the question is asked once, and tapping an option ticks it in place.
+   Nothing is re-sent and nothing is queued, so the row never disappears between taps. */
 function obPick(key,keys,q,noneLabel,next,n){
   if(!S.ob.h[key])S.ob.h[key]=[];
   const lab=k=>t("ob_"+(key==="cond"?"c_":key==="adl"?"adl_":"prev_")+k);
-  const leave=fn=>{S.ob.pick=null;S.ob.multi=false;clearReplies();fn()};
-  const draw=()=>{S.ob.pend=draw;S.ob.lastQ=q;S.ob.multi=true;
-    const sel=S.ob.h[key];
-    S.ob.pick={key,keys,lab,draw,noneLabel,
+  const leave=fn=>{S.ob.pick=null;S.ob.multi=false;clearReplies();S.curReplies=null;fn()};
+  const render=()=>{const sel=S.ob.h[key];
+    const list=keys.map(k=>[(sel.includes(k)?"✓ ":"")+lab(k),()=>{
+      const i=sel.indexOf(k);if(i<0)sel.push(k);else sel.splice(i,1);render()},{silent:true,keep:true,on:sel.includes(k)}]);
+    list.push([noneLabel,()=>S.ob.pick&&S.ob.pick.none(),{silent:true}]);
+    if(sel.length)list.push([t("ob_pick_done",{n:sel.length}),()=>S.ob.pick&&S.ob.pick.done(),{cls:"go"}]);
+    list.push([t("ob_ask_btn"),()=>obAskStart(),{silent:true}]);
+    setReplies(list)};
+  const ask=()=>{S.ob.pend=ask;S.ob.lastQ=q;S.ob.multi=true;
+    S.ob.pick={key,keys,lab,draw:render,noneLabel,
       none:()=>leave(()=>{S.ob.h[key]=[];next()}),
       done:()=>leave(next)};
     const head=`<p class="note" style="margin:0 0 4px">${t("ob_step",{n,of:OB_STEPS})}</p>`;
     bot(head+`<p style="margin:0">${q}</p>`);
     run(()=>{S.await=null});
-    const list=keys.map(k=>[(sel.includes(k)?"✓ ":"")+lab(k),()=>{
-      const i=sel.indexOf(k);if(i<0)sel.push(k);else sel.splice(i,1);clearReplies();draw()},{silent:true}]);
-    list.push([noneLabel,()=>S.ob.pick.none(),{silent:true}]);
-    if(sel.length)list.push([t("ob_pick_done",{n:sel.length}),()=>S.ob.pick.done()]);
-    list.push([t("ob_ask_btn"),()=>obAskStart(),{silent:true}]);
-    replies(list)};
-  draw()}
+    later(render)};
+  ask()}
 
 /* ---- 4. decision ---- */
 function obDecide(){
@@ -5441,7 +5445,10 @@ function bot(html,o={}){const g=gen;later(()=>new Promise(r=>{
 function sys(html,cls="sys"){later(()=>{add(cls,html)})}
 function user(html){READ.ms=0;return add("me",html)}
 function replies(list){later(()=>setReplies(list))}
-function setReplies(list){repEl.innerHTML="";S.curReplies=list;S.curQ=typeof curQuestion==="function"?curQuestion():"";list.forEach(([label,fn,opts={}])=>{const b=document.createElement("button");b.type="button";b.textContent=label;b.onclick=()=>{clearReplies();S.curReplies=null;if(!opts.silent){const el=user(esc(label));maybeReact(el,label,opts.react||null)}fn()};repEl.appendChild(b)})}
+function setReplies(list){repEl.innerHTML="";S.curReplies=list;S.curQ=typeof curQuestion==="function"?curQuestion():"";list.forEach(([label,fn,opts={}])=>{const b=document.createElement("button");b.type="button";b.textContent=label;if(opts.on!=null)b.setAttribute("aria-pressed",opts.on?"true":"false");if(opts.cls)b.classList.add(opts.cls);
+  /* keep: a multi-select chip. Tapping it toggles in place and leaves the row standing, so the
+     member can pick several and then press Done, instead of the row closing on the first tap. */
+  b.onclick=()=>{if(opts.keep){fn();return}clearReplies();S.curReplies=null;if(!opts.silent){const el=user(esc(label));maybeReact(el,label,opts.react||null)}fn()};repEl.appendChild(b)})}
 function clearReplies(){repEl.innerHTML=""}
 /* After anything off-script (a question, a language switch, an unclear reply, a voice note with no words),
    bring the member back to the open question: ask it again if it was typed, and restore its buttons. */
