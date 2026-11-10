@@ -2456,14 +2456,18 @@ function vmTavusStart(){const T=window.EliaTavus;if(!T||VM.tv||VM.ttsOnly)return
 /* One duplex turn: collect every ELIA message produced by this input (buttons pressed by meaning, Claude answers, cards) as one spoken reply */
 async function vmDuplexTurn(text){if(!VM.on||!text)return"";
   /* her own voice coming back through the speakers: a fragment that arrives while she is still talking, with no interruption (Tavus stops her first when the member cuts in) */
-  const words=text.trim().split(/\s+/).length;if(VM.tvTalking&&words<=4)return"";if(/—$|^[^\p{L}\p{N}]*$/u.test(text.trim())&&words<=3)return"";
+  /* GPT-Live cancels echo and handles interruption itself, so a short reply there is the member
+     talking over ELIA, not her own voice coming back. The guard stays on for the avatar. */
+  const words=text.trim().split(/\s+/).length;
+  if(VM.live!=="ready"&&VM.tvTalking&&words<=4)return"";
+  if(/—$|^[^\p{L}\p{N}]*$/u.test(text.trim())&&words<=3)return"";
   vmCap(null,text);
   if(/^(?:stop|end voice( mode)?|exit voice mode|goodbye|termina(r)?( modo de voz)?|adios|أنهِ|انهاء|إنهاء)$/i.test(vmNorm(text))){setTimeout(vmClose,800);return t("vm_bye")}
   /* Voice is a health Q&A with ELIA: it never runs the onboarding or scoring flow. Emergencies get the safety line first. */
   if(SAFE_RE.test(text)||(typeof simEmergency==="function"&&simEmergency(text)))return t("vm_emerg_line",{num:t("emerg_val")});
   /* the one flow voice can start: onboarding onto a plan, which then runs in the chat */
   if(OB_RE.test(text)&&!S.ob){obStart();return t("ob_voice_start")}
-  if(S.ob&&(obActive()||obTopic(text)))return obVoice(text);
+  if(S.ob&&(obActive()||S.ob.wrap||obTopic(text)))return obVoice(text);
   return voiceAnswer(text)}
 /* A spoken answer: short, conversational, from the member's data when it applies, otherwise Claude's general guidance. Keeps a short memory of the call. */
 async function voiceAnswer(q){VM.hist=VM.hist||[];const s=sampleOff?null:await getSample();if(!s)return t("vm_noai");
@@ -2487,12 +2491,13 @@ function vmLiveStart(){const Lv=window.EliaLive;if(!Lv||VM.live)return Promise.r
         onStarted:()=>{VM.tvTalking=true;v.classList.add("talking");vmState("speaking")},
         onStopped:()=>{VM.tvTalking=false;v.classList.remove("talking");vmState(VM.muted?"muted":"listening")},
         onDelegate:q=>vmDuplexTurn(q),
+        onBotText:txt=>vmCap(txt,null,"elia"),
         onEmergency:txt=>{if(!VM.emergSaid&&(SAFE_RE.test(txt)||(typeof simEmergency==="function"&&simEmergency(txt)))){VM.emergSaid=true;Lv.say(t("vm_emerg_line",{num:t("emerg_val")}));return true}return false},
         onClosed:why=>{if(!VM.on||VM.live!=="ready")return;VM.live=null;VM.duplex=false;vmState("paused");vmCap(t("vm_live_ended"),null,"elia")},
         onError:e=>console.warn("GPT-Live:",e)},{lang:S.lang,context:`The member's name is ${S.name||"unknown"}. Language: ${LANG_NAME[S.lang]}.`})}
     catch(e){fail(e&&e.message);return false}
     if(!VM.on){try{Lv.stop()}catch(e){}return false}
-    VM.live="ready";VM.duplex=true;VM.emergSaid=false;vmStopListen();vmRelease();v.classList.add("duplex");VM.queue=[];VM.speaking=false;vmState("listening");
+    VM.live="ready";VM.duplex=true;VM.emergSaid=false;setTimeout(()=>{if(obActive())obLiveMode(true)},600);vmStopListen();vmRelease();v.classList.add("duplex");VM.queue=[];VM.speaking=false;vmState("listening");
     setTimeout(()=>{try{if(VM.live==="ready")Lv.think(`Member data ELIA can use:\n${memberContext()||"(nothing collected yet)"}`)}catch(e){}},900);
     return true})}
 function vmLiveStop(){if(!VM.live)return;VM.live=null;VM.duplex=false;try{window.EliaLive&&EliaLive.stop()}catch(e){}const v=document.getElementById("vm");if(v){v.classList.remove("live","talking","duplex");const a=v.querySelector(".vm-aud");if(a)a.srcObject=null}}
@@ -2558,6 +2563,8 @@ function vmBrowserSay(text,who){if(!window.speechSynthesis){vmSpoken();return}
   const guard=setTimeout(done,Math.max(4000,text.length*95));u.onend=done;u.onerror=done;try{speechSynthesis.speak(u)}catch(e){done()}}
 /* hook: every new ELIA / Sim chat message is read aloud */
 function vmSpeakEl(el){if(!VM.on)return;const c=el.cloneNode(true);c.querySelectorAll(".ts,.who,.ph,.sample,svg,audio,img,details,.chips,.simfoot,.callsheet,.sc-sim,.rows,.segs,.meter,.fst-l,.dots,button").forEach(x=>x.remove());
+  /* the clone is detached, so innerText gives no line breaks: keep blocks apart for speech */
+  try{c.querySelectorAll("p,li,h4,h5,.sec,.eyebrow,.mq-row").forEach(x=>x.append(" "))}catch(e){}
   let txt;const card=c.querySelector(".simcard,.card");
   if(card){const pick=s=>[...card.querySelectorAll(s)].map(x=>x.innerText.trim()).filter(Boolean);const parts=[];
     const big=card.querySelector(".big b,.gauge text");const eye=card.querySelector(".eyebrow,.sc-eye");
@@ -3793,24 +3800,95 @@ function obTopic(x){return OB_RE.test(x)||OB_Q_RE.test(x)}
    so the whole journey can be done hands-free; anything else is answered as a plan question. */
 const OB_SAID=["ob_name","ob_dob","ob_zip","ob_amount","ob_bene"];
 /* a step can queue more messages while the last one is still going out, so settle more than once */
-async function obSettle(){for(let i=0;i<4;i++){try{await chain}catch(e){}await new Promise(r=>setTimeout(r,180))}}
+async function obSettle(){for(let i=0;i<5;i++){try{await chain}catch(e){}await new Promise(r=>setTimeout(r,180))}}
+/* Run one step and hand back everything ELIA said during it as a single spoken turn.
+   In duplex voice, every chat message already passes through vmSay, so collecting there
+   catches a step that says two or three things rather than only the last of them. */
+async function obCollect(act){
+  const prev=VM.collect;VM.collect=[];
+  try{act()}catch(e){}
+  await obSettle();
+  const said=(VM.collect||[]).join(" ").replace(/\s+/g," ").trim();
+  VM.collect=prev;
+  return said||obLastSpoken()}
+/* Spoken options. Someone on a call cannot see the chips, so the turn ends by reading them out. */
+function obChipHint(){
+  if(!S.ob||(!obActive()&&!S.ob.wrap))return"";
+  let names=[];try{names=[...repEl.querySelectorAll("button")].map(b=>b.innerText.replace(/^\u2713\s*/,"").trim())
+    .filter(x=>x&&x!==t("ob_ask_btn"))}catch(e){}
+  if(!names.length)return"";
+  if(S.ob.multi){const done=names.filter(x=>/^\s*(Done|Listo|\u062a\u0645)/i.test(x));
+    const opts=names.filter(x=>!done.includes(x));
+    return" "+t("ob_say_multi",{list:opts.slice(0,9).join(", ")})}
+  return" "+t("ob_say_one",{list:names.slice(0,6).join(", ")})}
+/* GPT-Live writes its own words by default, which is right for a chat and wrong for an
+   application: the wording, the figures and the options are fixed. This puts the model in
+   a mode where it delegates every turn and speaks what it is handed, word for word. */
+const OB_LIVE_ON="APPLICATION MODE ON. The member is filling in a Humana enrolment application inside the app. Until you are told APPLICATION MODE OFF: delegate every single turn to the client, and then speak the commentary you receive exactly as written, word for word. The wording, the amounts and the answer options are fixed and legally sensitive: do not paraphrase, shorten, reorder, translate or add to them, do not ask questions of your own, and do not answer from your own knowledge.";
+const OB_LIVE_OFF="APPLICATION MODE OFF. The application is finished. Go back to the normal conversation in your own words.";
+function obLiveMode(on){try{const Lv=window.EliaLive;
+  if(VM.live==="ready"&&Lv&&Lv.active&&typeof Lv.think==="function")Lv.think(on?OB_LIVE_ON:OB_LIVE_OFF)}catch(e){}}
+/* Speech gives words where the chips show digits ("four to seven" for "4 to 7"), drops
+   punctuation, and wraps the answer in filler. Match on that footing rather than on the label. */
+const OB_W2D=[["zero","0"],["one","1"],["two","2"],["three","3"],["four","4"],["five","5"],["six","6"],
+ ["seven","7"],["eight","8"],["nine","9"],["ten","10"],["uno","1"],["dos","2"],["tres","3"],["cuatro","4"],["cinco","5"]];
+function obNorm(x){let v=String(x||"").toLowerCase().replace(/[\u2018\u2019]/g,"'");
+  v=v.replace(/[^\p{L}\p{N}\s'$]/gu," ");
+  for(const [w,d] of OB_W2D)v=v.replace(new RegExp("\\b"+w+"\\b","g"),d);
+  return v.replace(/\s+/g," ").trim()}
+const OB_FILLER=/^(?:(?:um|uh|er|ok|okay|well|so|please|i|i'm|im|it's|its|say|select|choose|pick|the answer is|my answer is)\s+)+/;
+const OB_DONE_RE=/\b(done|that'?s all|that is all|thats it|that'?s it|finished|no more|nothing else|listo|ya est|eso es todo|تم|انتهيت)\b/;
+function obChips(){try{return[...repEl.querySelectorAll("button")].filter(b=>b.innerText.trim()!==t("ob_ask_btn"))}catch(e){return[]}}
+function obMatchChip(q){
+  const btns=obChips();if(!btns.length)return null;
+  const u=obNorm(q).replace(OB_FILLER,"").trim();if(!u)return null;
+  const forms=b=>{const l=obNorm(b.innerText.replace(/^✓\s*/,""));
+    return[l,l.replace(/\s*\(\d+\)\s*$/,""),l.split("\u00b7")[0].trim()].filter(Boolean)};
+  for(const b of btns)if(forms(b).includes(u))return b;          /* said it exactly */
+  let best=null,bs=0;
+  for(const b of btns){let sc=0;
+    for(const c of forms(b)){
+      if(u.startsWith(c)||c.startsWith(u))sc=Math.max(sc,0.9);
+      else if(u.includes(c)||c.includes(u))sc=Math.max(sc,0.78);
+      else{const ut=new Set(u.split(" ")),ct=c.split(" ").filter(Boolean);
+        if(ct.length)sc=Math.max(sc,ct.filter(w=>ut.has(w)).length/ct.length*0.7)}}
+    if(sc>bs){bs=sc;best=b}}
+  return bs>=0.7?best:null}
 async function obVoice(q){
   /* let whatever ELIA is mid-way through saying finish, so the chips exist to match against */
   await obSettle();
-  try{const b=S.await?strictMatch(q):vmMatchReply(q);
-    if(b){b.click();await obSettle();return obLastSpoken()}}catch(e){}
+  /* ticking a multi-select: several answers can arrive in one breath, and "done" closes it */
+  if(S.ob&&S.ob.pick){const P=S.ob.pick,u=obNorm(q),sel=S.ob.h[P.key]||[];
+    if(obNorm(P.noneLabel)===u||(/\bnone\b|\bninguna\b|^no$/.test(u)&&!sel.length)){
+      const said=await obCollect(()=>P.none());return said+obChipHint()}
+    const hits=P.keys.filter(k=>{const l=obNorm(P.lab(k));return l&&(u===l||u.includes(l))});
+    if(hits.length){hits.forEach(k=>{if(!sel.includes(k))sel.push(k)});
+      await obCollect(()=>{clearReplies();P.draw()});
+      return t("ob_ticked",{list:listJoin(hits.map(k=>P.lab(k)))})+obChipHint()}
+    if(OB_DONE_RE.test(u)){const said=await obCollect(()=>sel.length?P.done():P.none());return said+obChipHint()}}
+  let act=null;
+  const hit=obMatchChip(q);
+  if(hit)act=()=>hit.click();
+  if(!act)try{const b=S.await?strictMatch(q):vmMatchReply(q);if(b)act=()=>b.click()}catch(e){}
   /* a spoken answer to a question that takes words rather than a tap: a name, a date, a ZIP, an amount */
-  if(OB_SAID.includes(S.await)&&!obTopic(q)){
-    try{const i=$("#inp");i.value=q;$("#composer").requestSubmit()}catch(e){}
-    await obSettle();return obLastSpoken()}
-  const s=sampleOff?null:await getSample();
-  if(!s)return obFallback(q);
-  try{const r=await s(`You are ELIA, Prime Health's health companion, on a voice call with a member who is part-way through onboarding onto a Humana plan. Answer their question about the plan as natural speech: warm, plain, one to three short sentences, no lists, no markdown, no emoji. Answer in ${LANG_NAME[S.lang]}. Amounts in US dollars.
-Use ONLY the plan information below. If it does not settle the question, say so and point them to Humana member services. Never invent a benefit or a figure, never give medical advice, never promise an approval. End by inviting them back to the question on screen.
+  if(!act&&OB_SAID.includes(S.await)&&!obTopic(q))act=()=>{const i=$("#inp");i.value=q;$("#composer").requestSubmit()};
+  if(act){const said=await obCollect(act);return said+obChipHint()}
+  /* not a chip, not an answer and not a question: better to say so and read the question again
+     than to answer something the member never asked */
+  if(S.ob&&(obActive()||S.ob.wrap)&&!Q_RE.test(q)&&!obTopic(q))return t("ob_didnt_catch")+" "+(obActive()?(S.ob.lastQ||""):"")+obChipHint();
+  /* a question about the plan: answer it, put the answer in the transcript too, then put the
+     member back on the question they were on, because on a call they cannot see it */
+  let a=null;const sm=sampleOff?null:await getSample();
+  if(sm){try{const r=await sm(`You are ELIA, Prime Health's health companion, on a voice call with a member who is part-way through onboarding onto a Humana plan. Answer their question about the plan as natural speech: warm, plain, one to three short sentences, no lists, no markdown, no emoji. Answer in ${LANG_NAME[S.lang]}. Amounts in US dollars.
+Use ONLY the plan information below. If it does not settle the question, say so and point them to Humana member services. Never invent a benefit or a figure, never give medical advice, never promise an approval. Do not add a closing question of your own.
 ${obContext()}
 The member said: """${q}"""`,{modelTier:"default",cache:false});
-    const a=(r&&r.text||"").replace(/\*\*/g,"").replace(/\s+/g," ").trim();return a||obFallback(q)}
-  catch(e){return obFallback(q)}}
+    a=(r&&r.text||"").replace(/\*\*/g,"").replace(/\s+/g," ").trim()||null}catch(e){}}
+  if(!a)a=obFallback(q);
+  /* into the transcript without disturbing the chips the member is standing on */
+  try{const prev=VM.collect;VM.collect=[];add("",recMd(a));VM.collect=prev}catch(e){}
+  if(!S.ob||(!obActive()&&!S.ob.wrap))return a;
+  return a+(obActive()?" "+t("ob_back_q",{q:S.ob.lastQ||""}):"")+obChipHint()}
 function obLastSpoken(){const list=[...msgsEl.querySelectorAll(".msg:not(.me):not(.sys):not(.sim):not(.typing)")];
   for(let i=list.length-1;i>=0;i--){let txt=(list[i].innerText||"").replace(/\s+/g," ").trim();
     txt=txt.replace(/\s*\d{1,2}:\d{2}(\s?[AaPp]\.?[Mm]\.?)?$/,"").trim();
@@ -3848,14 +3926,14 @@ function obFmtDate(d,lang){return d.toLocaleDateString(LOCALE[lang||S.lang],{yea
 function obPdfLang(){return S.lang==="ar"?"en":S.lang}
 
 /* ---- state ---- */
-function obNew(){return{step:0,d:{},h:{},flags:[],progs:[],decision:null,pend:null,done:false,asked:0}}
+function obNew(){return{step:0,d:{},h:{},flags:[],progs:[],decision:null,pend:null,done:false,asked:0,lastQ:"",multi:false,pick:null,wrap:false}}
 function obActive(){return !!(S.ob&&!S.ob.done)}
 function obAge(){return S.ob&&S.ob.d.age||null}
 
 /* ---- step scaffolding: every question can be interrupted with a question about the plan ---- */
 function obQ(q,chips,o={}){
   if(!S.ob)S.ob=obNew();
-  S.ob.pend=()=>obQ(q,chips,o);
+  S.ob.pend=()=>obQ(q,chips,o);S.ob.lastQ=q;S.ob.multi=false;S.ob.pick=null;
   const head=o.n?`<p class="note" style="margin:0 0 4px">${t("ob_step",{n:o.n,of:OB_STEPS})}</p>`:"";
   bot(head+`<p style="margin:0">${q}</p>`,o.bot||{});
   run(()=>{S.await=o.await?"ob_"+o.await:null});
@@ -3863,6 +3941,8 @@ function obQ(q,chips,o={}){
   if(!o.noAsk)list.push([t("ob_ask_btn"),()=>obAskStart(),{silent:true}]);
   replies(list)}
 function obResume(){if(!obActive()||!S.ob.pend)return false;const f=S.ob.pend;bot(t("ob_back"),{delay:260});later(f);return true}
+/* a mistyped or misheard answer: just ask again, no "back to your application" in between */
+function obReask(){if(!obActive()||!S.ob.pend)return false;later(S.ob.pend);return true}
 
 /* ---- 1. the offer ---- */
 function obStart(){
@@ -3870,19 +3950,19 @@ function obStart(){
   /* started cold from Quick actions: bring in the example member and their record, so the
      assessment can show what it already knows instead of asking for it twice */
   if(!S.name){loadPersona();S.langChosen=true;if(!S.record)S.record=recMakeRecord();renderHQ()}
-  S.ob=obNew();
+  S.ob=obNew();obLiveMode(true);
   bot(t("ob_intro",{name:esc(S.name||t("hq_member"))}));
   bot(t("ob_intro2"));
   obQ(t("ob_consent_q"),[
     [t("ob_consent_yes"),()=>{S.ob.step=1;obName()},{react:"goals"}],
     [t("ob_what_btn"),()=>obAnswer(t("ob_what_q"))],
-    [t("ob_not_now"),()=>{S.ob=null;bot(t("ob_later"));if(S.coreDone)coreReplies()}]],{noAsk:true})}
+    [t("ob_not_now"),()=>{S.ob=null;obLiveMode(false);bot(t("ob_later"));if(S.coreDone)coreReplies()}]],{noAsk:true})}
 
 /* ---- 2. demographics ---- */
 function obName(){const n=S.name||"";
   obQ(t("ob_q_name"),n?[[t("ob_use_name",{name:esc(n)}),()=>{S.ob.d.name=n;obDob()}]]:[],{await:"name",n:1})}
 function obOnName(x){const v=String(x||"").replace(/^(?:my name is|my name's|i am|i'm|im|it's|its|call me|me llamo|soy|اسمي)\s+/i,"").replace(/[.!]+$/,"").trim();
-  if(!v){obResume();return}S.ob.d.name=v.split(/\s+/).slice(0,4).join(" ").slice(0,48);S.await=null;clearReplies();obDob()}
+  if(!v){obReask();return}S.ob.d.name=v.split(/\s+/).slice(0,4).join(" ").slice(0,48);S.await=null;clearReplies();obDob()}
 function obDob(){obQ(t("ob_q_dob"),[[t("ob_dob_eg"),()=>obSetDob(1959,3,14)]],{await:"dob",n:2})}
 /* spoken numbers: "nineteen fifty nine", "fifty thousand" — voice gives words, not digits */
 const OB_NUM={zero:0,oh:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,
@@ -3905,7 +3985,7 @@ function obWordAmount(x){const s=String(x).toLowerCase();if(!/thousand|\d\s*k\b/
   n=cur;return n>0?n*1000:null}
 function obOnDob(x){const s=String(x||"");const ym=s.match(/\b(19[0-9]{2}|20[0-1][0-9])\b/);
   const wy=ym?null:obWordYear(s);
-  if(!ym&&!wy){bot(t("ob_dob_again"));obResume();return}
+  if(!ym&&!wy){bot(t("ob_dob_again"));obReask();return}
   const y=ym?+ym[1]:wy;let mo=0,da=1;
   const iso=s.match(/\b(19\d{2}|20[0-1]\d)[-/](\d{1,2})[-/](\d{1,2})\b/);
   const dmy=s.match(/\b(\d{1,2})[-/](\d{1,2})[-/](19\d{2}|20[0-1]\d)\b/);
@@ -3916,7 +3996,7 @@ function obOnDob(x){const s=String(x||"");const ym=s.match(/\b(19[0-9]{2}|20[0-1
 function obSetDob(y,m,d){
   const today=new Date(2026,10,9);let age=today.getFullYear()-y;
   if(m&&(m-1>today.getMonth()||(m-1===today.getMonth()&&d>today.getDate())))age--;
-  if(age<18||age>110){bot(t("ob_dob_again"));obResume();return}
+  if(age<18||age>110){bot(t("ob_dob_again"));obReask();return}
   S.ob.d.dobY=y;S.ob.d.dobM=m;S.ob.d.dobD=d;S.ob.d.age=age;
   S.ob.d.dobText=new Date(y,(m||1)-1,d||1).toLocaleDateString(LOCALE[S.lang],{year:"numeric",month:"long",day:"numeric"});
   S.ob.elig=age>=65;
@@ -3924,13 +4004,16 @@ function obSetDob(y,m,d){
   else{bot(t("ob_under65",{age,plan:HUM.health.short}));
     obQ(t("ob_under65_q"),[
       [t("ob_under65_yes"),()=>{S.ob.d.medicare="n/a";obZip()},{react:"goals"}],
-      [t("ob_under65_no"),()=>{bot(t("ob_later"));S.ob=null;if(S.coreDone)coreReplies()}]],{noAsk:false})}}
+      [t("ob_under65_no"),()=>{bot(t("ob_later"));S.ob=null;obLiveMode(false);if(S.coreDone)coreReplies()}]],{noAsk:false})}}
 function obMedicare(){obQ(t("ob_q_medicare"),[
   [t("ob_med_both"),()=>{S.ob.d.medicare="ab";obZip()}],
   [t("ob_med_a"),()=>{S.ob.d.medicare="a";bot(t("ob_med_a_note"));obZip()}],
   [t("ob_med_no"),()=>{S.ob.d.medicare="no";bot(t("ob_med_no_note"));obZip()}]],{n:3})}
 function obZip(){obQ(t("ob_q_zip"),[[t("ob_zip_eg"),()=>obSetZip("45202")]],{await:"zip",n:4})}
-function obOnZip(x){const m=String(x||"").match(/\b(\d{5})\b/);if(!m){bot(t("ob_zip_again"));obResume();return}S.await=null;clearReplies();obSetZip(m[1])}
+const OB_DIG={zero:0,oh:0,o:0,nought:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9};
+function obDigits(x){const d=String(x).toLowerCase().replace(/[-,.]/g," ").split(/\s+/).map(w=>OB_DIG[w]).filter(n=>n!=null);return d.length>=5?d.slice(0,5).join(""):null}
+function obOnZip(x){const m=String(x||"").match(/\b(\d{5})\b/);const z=m?m[1]:obDigits(x);
+  if(!z){bot(t("ob_zip_again"));obReask();return}S.await=null;clearReplies();obSetZip(z)}
 function obSetZip(z){S.ob.d.zip=z;bot(t("ob_zip_ok",{zip:z,plan:HUM.health.short}));obSex()}
 function obSex(){const f=S.facts.sex&&S.facts.sex.val&&S.facts.sex.val.k;
   obQ(t("ob_q_sex")+(f?" "+t("ob_prefill"):""),[
@@ -3945,9 +4028,9 @@ function obAmount(){const L=HUM.life,a=obAge()||50;
   const opts=[25000,50000,100000,150000];
   bot(t("ob_amount_lead",{min:usd(L.min),gi:usd(L.gi),max:usd(L.max)}));
   obQ(t("ob_q_amount"),opts.map(v=>[`${usd(v)} · ${usd2(obPremium(v,a,S.ob.d.tobacco))}${t("ob_per_month")}`,()=>obSetAmount(v)])
-    .concat([[t("ob_amount_other"),()=>{obQ(t("ob_q_amount_other",{min:usd(L.min),max:usd(L.max)}),[],{await:"amount",n:7})}]]),{n:7})}
+    .concat([[t("ob_amount_other"),()=>{obQ(t("ob_q_amount_other",{min:usd(L.min),max:usd(L.max)}),[],{await:"amount",n:7})}]]),{await:"amount",n:7})}
 function obOnAmount(x){const w=obWordAmount(x);const m=w?null:String(x||"").replace(/[,\s]/g,"").match(/(\d{3,7})/);
-  if(!w&&!m){obResume();return}
+  if(!w&&!m){obReask();return}
   let v=Math.round((w||+m[1])/HUM.life.step)*HUM.life.step;
   v=Math.max(HUM.life.min,Math.min(HUM.life.max,v));S.await=null;clearReplies();obSetAmount(v)}
 function obSetAmount(v){S.ob.d.amount=v;S.ob.d.premium=obPremium(v,obAge()||50,S.ob.d.tobacco);
@@ -3955,7 +4038,7 @@ function obSetAmount(v){S.ob.d.amount=v;S.ob.d.premium=obPremium(v,obAge()||50,S
   if(v>HUM.life.gi)bot(t("ob_amount_eoi",{gi:usd(HUM.life.gi)}));
   obBene()}
 function obBene(){obQ(t("ob_q_bene"),[[t("ob_bene_eg"),()=>obSetBene(t("ob_bene_eg_val"))]],{await:"bene",n:8})}
-function obOnBene(x){const v=String(x||"").trim();if(!v){obResume();return}S.await=null;clearReplies();obSetBene(v.slice(0,60))}
+function obOnBene(x){const v=String(x||"").trim();if(!v){obReask();return}S.await=null;clearReplies();obSetBene(v.slice(0,60))}
 function obSetBene(v){S.ob.d.bene=v;
   obQ(t("ob_q_rel",{who:esc(v)}),[["ob_rel_spouse"],["ob_rel_child"],["ob_rel_parent"],["ob_rel_other"]]
     .map(([k])=>[t(k),()=>{S.ob.d.rel=t(k);obHraIntro()}]),{n:9})}
@@ -4005,15 +4088,20 @@ function obH14(){obQ(t("ob_h_support"),[["ob_s_family"],["ob_s_friend"],["ob_s_n
 /* a multi-select built out of the ordinary reply chips: tap to toggle, then Done */
 function obPick(key,keys,q,noneLabel,next,n){
   if(!S.ob.h[key])S.ob.h[key]=[];
-  const draw=()=>{S.ob.pend=draw;
+  const lab=k=>t("ob_"+(key==="cond"?"c_":key==="adl"?"adl_":"prev_")+k);
+  const leave=fn=>{S.ob.pick=null;S.ob.multi=false;clearReplies();fn()};
+  const draw=()=>{S.ob.pend=draw;S.ob.lastQ=q;S.ob.multi=true;
     const sel=S.ob.h[key];
+    S.ob.pick={key,keys,lab,draw,noneLabel,
+      none:()=>leave(()=>{S.ob.h[key]=[];next()}),
+      done:()=>leave(next)};
     const head=`<p class="note" style="margin:0 0 4px">${t("ob_step",{n,of:OB_STEPS})}</p>`;
     bot(head+`<p style="margin:0">${q}</p>`);
     run(()=>{S.await=null});
-    const list=keys.map(k=>[(sel.includes(k)?"✓ ":"")+t("ob_"+(key==="cond"?"c_":key==="adl"?"adl_":"prev_")+k),()=>{
+    const list=keys.map(k=>[(sel.includes(k)?"✓ ":"")+lab(k),()=>{
       const i=sel.indexOf(k);if(i<0)sel.push(k);else sel.splice(i,1);clearReplies();draw()},{silent:true}]);
-    list.push([noneLabel,()=>{S.ob.h[key]=[];clearReplies();next()},{silent:true}]);
-    if(sel.length)list.push([t("ob_pick_done",{n:sel.length}),()=>{clearReplies();next()}]);
+    list.push([noneLabel,()=>S.ob.pick.none(),{silent:true}]);
+    if(sel.length)list.push([t("ob_pick_done",{n:sel.length}),()=>S.ob.pick.done()]);
     list.push([t("ob_ask_btn"),()=>obAskStart(),{silent:true}]);
     replies(list)};
   draw()}
@@ -4081,12 +4169,12 @@ function obCard(){const dec=S.ob.decision,D=S.ob.d;
   ${prog?`<div class="sec">${t("ob_card_prog")}</div><ul class="plain">${prog}</ul>`:""}
   <p class="mq-meta">${t("ob_filemeta",{kb})}</p>
   <p class="mq-note" style="font-size:12.5px">${t("ob_sample_note")}</p></div>`,{cls:"wide",delay:600})}
-function obDoneReplies(){replies([
+function obDoneReplies(){if(S.ob)S.ob.wrap=true;replies([
   [t("ob_open"),()=>{obOpen();obDoneReplies()},{silent:true}],
   [t("ob_share"),()=>{obShare();obDoneReplies()},{silent:true}],
   [t("ob_hq"),()=>{S.hqTab="files";S.openFile="onboard";setView("hq");renderHQ()},{silent:true}],
   [t("ob_ask_btn"),()=>obAskStart()],
-  [t("ob_finish"),()=>{bot(t("ob_bye"));if(S.coreDone)coreReplies()}]])}
+  [t("ob_finish"),()=>{if(S.ob)S.ob.wrap=false;obLiveMode(false);bot(t("ob_bye"));if(S.coreDone)coreReplies()}]])}
 
 /* ---- questions about the plan, at any point in the journey ---- */
 function obAskStart(){const pend=S.ob&&S.ob.pend;
@@ -4299,6 +4387,9 @@ function obRender(){
   return d.build()}
 
 Object.assign(L.en,{
+ ob_ticked:"{list}, noted. Anything else, or say done.",
+ ob_didnt_catch:"Sorry, I didn't catch that.",
+ ob_say_one:"You can say: {list}.",ob_say_multi:"Say each one that applies, then say done. The options are: {list}.",ob_back_q:"Now, back to where we were.",
  ob_voice_start:"I've started that in the chat for you. Have a look at the screen and we'll go through it together.",ob_voice_ok:"Got it.",
  p_onboard:"Onboard my plan",file_ob:"Humana benefits summary",ph_ob:"Plan onboarding · Humana",
  ob_step:"Question {n} of {of}",ob_ask_btn:"Ask about the plan",ob_back:"Right, back to your application.",ob_skip:"Rather not say",ob_prefill:"I have this from your profile \u2014 just confirm it.",
@@ -4491,6 +4582,9 @@ Object.assign(L.en,{
  ob_pdf_f_next:"Next steps"});
 
 Object.assign(L.es,{
+ ob_ticked:"{list}, anotado. ¿Algo más? Si no, di listo.",
+ ob_didnt_catch:"Perdón, no te entendí.",
+ ob_say_one:"Puedes decir: {list}.",ob_say_multi:"Di cada una que aplique y luego di listo. Las opciones son: {list}.",ob_back_q:"Ahora, volvamos a donde íbamos.",
  ob_voice_start:"Ya lo abrí en el chat. Mira la pantalla y lo vamos viendo juntos.",ob_voice_ok:"Listo.",
  p_onboard:"Dar de alta mi plan",file_ob:"Resumen de cobertura Humana",ph_ob:"Alta de plan · Humana",
  ob_step:"Pregunta {n} de {of}",ob_ask_btn:"Preguntar sobre el plan",ob_back:"Bien, volvamos a tu solicitud.",ob_skip:"Prefiero no decirlo",
@@ -4687,6 +4781,9 @@ Object.assign(L.es,{
    summary document is written in English and the chat says so. Any ob_pdf_* key
    falls back to English through t(). */
 Object.assign(L.ar,{
+ ob_ticked:"{list}، سجّلتها. أي شيء آخر؟ وإلا قل تم.",
+ ob_didnt_catch:"عذرًا، لم أسمع ذلك جيدًا.",
+ ob_say_one:"يمكنك أن تقول: {list}.",ob_say_multi:"قل كل ما ينطبق ثم قل تم. والخيارات هي: {list}.",ob_back_q:"والآن، لنعد إلى حيث كنا.",
  ob_voice_start:"فتحت ذلك لك في المحادثة. انظر إلى الشاشة ولنمضِ فيه معًا.",ob_voice_ok:"تمام.",
  p_onboard:"تسجيل خطتي",file_ob:"ملخص تغطية Humana",ph_ob:"تسجيل الخطة · Humana",
  ob_step:"السؤال {n} من {of}",ob_ask_btn:"اسأل عن الخطة",ob_back:"حسنًا، لنعد إلى طلبك.",ob_skip:"أفضّل عدم الإجابة",
