@@ -1,11 +1,10 @@
 <!doctype html>
 <html lang="en">
 <head>
-<script>if(location.hostname==="elia-demo.onrender.com")location.replace("https://elia-oman-demo.onrender.com/"+location.hash)</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
-<title>ELIA by Prime Health</title>
+<title>ELIA v3 Prototype</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -866,6 +865,7 @@ li.wc-scope{cursor:default}
         <button data-tab="devices"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="3"/><path d="M9 6V2.5h6V6M9 18v3.5h6V18M9.5 12h1.5l1-2 1.5 4 1-2h1"/></svg><span data-t="hq_devices">My Devices</span></button>
         <button data-tab="insurance"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 4.5 5.5v6c0 4.6 3.2 8.6 7.5 9.9 4.3-1.3 7.5-5.3 7.5-9.9v-6z"/><path d="M12 8.5v6M9 11.5h6"/></svg><span data-t="hq_ins">My Insurance</span></button>
         <button data-tab="care"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/><path d="M3.5 12h4l2-3 3 6 2-3h6"/></svg><span data-t="hq_care">My Care</span></button>
+        <div class="x-sep" data-t="x_nav_sep">New in v3</div><button data-tab="circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9.5" r="2.4"/><path d="M3 20a6 6 0 0 1 12 0M15.5 14.6A4.6 4.6 0 0 1 21 19"/></svg><span data-t="x_nav_circle">My Circle</span></button><button data-tab="rewards"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="6"/><path d="M8.5 14 7 22l5-3 5 3-1.5-8"/></svg><span data-t="x_nav_rewards">Rewards</span></button><button data-tab="prevention"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 4.5 5.5v6c0 4.6 3.2 8.6 7.5 9.9 4.3-1.3 7.5-5.3 7.5-9.9v-6z"/><path d="m9 12 2.2 2.2L15.2 10"/></svg><span data-t="x_nav_prev">Prevention</span></button><button data-tab="meds"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="8" rx="4"/><path d="M12 8v8"/></svg><span data-t="x_nav_meds">Medication</span></button><button data-tab="privacy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span data-t="x_nav_privacy">Privacy</span></button>
         <div class="auth"><span class="uav" id="uAv">M</span><span><b id="uName">Member</b><small data-t="hq_signed">Signed in</small></span></div>
       </nav>
       <div class="hq-main" id="hqMain"></div>
@@ -1425,7 +1425,26 @@ function simEnd(){S.sim=null;setSimHeader(false);const prev=S.simPrev,pr=S.simPr
   const ASK={name:"ask_name",age:"ask_age",hw:"ask_hw",meal:"ask_meal",allergy:"ask_allergy",injury:"ask_inj",ing:"ask_ing",injury_other:"ask_inj_other"};
   if(prev){S.await=prev;bot(t("tri_back_to")+(ASK[prev]?" "+t(ASK[prev],{name:esc(S.name)}):""))}
   else if(pr&&pr.length)bot(t("tri_back_to"));
-  later(()=>{if(S.sim)return;if(S.insPending&&!prev){const f=S.insPending;S.insPending=null;S.simPrevKeep=pr;f();return}S.insPending=null;if(pr&&pr.length){repEl.innerHTML="";pr.forEach(b=>repEl.appendChild(b))}else if(S.coreDone)coreReplies();else clearReplies()})}
+  const restore=()=>{if(S.sim)return;if(S.insPending&&!prev){const f=S.insPending;S.insPending=null;S.simPrevKeep=pr;f();return}S.insPending=null;if(pr&&pr.length){repEl.innerHTML="";pr.forEach(b=>repEl.appendChild(b))}else if(S.coreDone)coreReplies();else clearReplies()};
+  /* Sim said "see a doctor": ELIA offers to book the visit before handing the conversation back. */
+  const c=S.care[0];
+  if(c&&c.fresh&&!prev&&(c.level===2||c.level===3)){c.fresh=false;later(()=>{if(S.sim)return;careBookOffer(c,restore)});return}
+  if(c)c.fresh=false;
+  later(restore)}
+/* ============ Book a visit after a symptom check (simulated scheduling) ============ */
+function careDoc(){const a=S.record&&S.record.appointments&&S.record.appointments.find(x=>x.participant&&x.participant[0]&&x._org!=="elia");return a?a.participant[0].actor.display.replace(/,\s*MD$/,""):null}
+function careSlots(){const d=new Date(),p=n=>String(n).padStart(2,"0");const mk=(add,h,m)=>{const x=new Date(d.getFullYear(),d.getMonth(),d.getDate()+add);return`${x.getFullYear()}-${p(x.getMonth()+1)}-${p(x.getDate())}T${p(h)}:${p(m)}:00`};return[mk(1,11,20),mk(1,15,45),mk(2,9,10)]}
+function careWhen(s){return`${recD(s)} · ${s.slice(11,16)}`}
+function careBookOffer(c,done){const doc=careDoc();bot(t(doc?"bk_offer":"bk_offer_nodoc",{doc:esc(doc||"")}));
+  replies([...careSlots().map(s=>[careWhen(s),()=>careBook(c,s,doc,done),{react:"appointments"}]),[t("bk_notnow"),()=>{bot(t("bk_later"));later(done)}]])}
+function careBook(c,s,doc,done){const who=doc||t("bk_doc_generic");c.appt={start:s,doc:who};
+  if(S.record&&S.record.appointments)S.record.appointments.unshift({resourceType:"Appointment",id:"ap-elia-"+Date.now(),meta:{source:"elia"},_org:"elia",status:"booked",start:s,description:t("bk_desc",{doc:who,why:c.complaint||careTitle(c)}),participant:[{actor:{display:who}}]});
+  addUpdate(()=>t("bk_upd",{doc:who}));renderHQ();flashHQ();
+  bot(`<div class="card"><div class="card-h"><span class="eyebrow">${t("bk_card_t")}</span><span class="ph">${t("ph_sched")}</span></div><p style="margin:0;font-weight:700;font-size:16px">${esc(who)}</p><p style="margin:0">${careWhen(s)}</p>${c.complaint?`<p class="note" style="margin:0">${t("bk_card_why",{why:esc(c.complaint)})}</p>`:""}<p class="note" style="margin:0">${t(S.record?"bk_card_note":"bk_card_note_norec")}</p></div>`,{cls:"wide"});
+  later(done)}
+Object.assign(L.en,{bk_offer:"Sim's advice is to see a doctor. Want me to book you in with {doc}, your primary care doctor? These are the next openings.",bk_offer_nodoc:"Sim's advice is to see a doctor. Want me to book a visit with a primary care doctor? These are the next openings.",bk_notnow:"Not now",bk_later:"No problem. Keep an eye on how you feel, and tell me if anything changes.",bk_doc_generic:"Primary care doctor",bk_desc:"Visit with {doc} · {why}",bk_upd:"Appointment booked · {doc}",bk_card_t:"Appointment booked",ph_sched:"Placeholder · Scheduling",bk_card_why:"Reason: {why}",bk_card_note:"Added to My Records and My Care. I'll remind you the evening before.",bk_card_note_norec:"Added to My Care. I'll remind you the evening before."});
+Object.assign(L.es,{bk_offer:"El consejo de Sim es ver a un médico. ¿Quieres que te agende con {doc}, tu médico de cabecera? Estos son los próximos horarios.",bk_offer_nodoc:"El consejo de Sim es ver a un médico. ¿Quieres que agende una consulta con un médico de atención primaria? Estos son los próximos horarios.",bk_notnow:"Ahora no",bk_later:"Sin problema. Observa cómo te sientes y avísame si algo cambia.",bk_doc_generic:"Médico de atención primaria",bk_desc:"Consulta con {doc} · {why}",bk_upd:"Cita agendada · {doc}",bk_card_t:"Cita agendada",ph_sched:"Marcador · Agenda",bk_card_why:"Motivo: {why}",bk_card_note:"Añadida a Mis registros y Mi atención. Te lo recordaré la noche anterior.",bk_card_note_norec:"Añadida a Mi atención. Te lo recordaré la noche anterior."});
+Object.assign(L.ar,{bk_offer:"نصيحة سيم هي مراجعة الطبيب. هل تريد أن أحجز لك موعدًا مع {doc}، طبيب الرعاية الأولية الخاص بك؟ هذه أقرب المواعيد المتاحة.",bk_offer_nodoc:"نصيحة سيم هي مراجعة الطبيب. هل تريد أن أحجز لك زيارة مع طبيب رعاية أولية؟ هذه أقرب المواعيد المتاحة.",bk_notnow:"ليس الآن",bk_later:"لا مشكلة. راقب حالتك وأخبرني إذا تغيّر شيء.",bk_doc_generic:"طبيب الرعاية الأولية",bk_desc:"زيارة مع {doc} · {why}",bk_upd:"تم حجز الموعد · {doc}",bk_card_t:"تم حجز الموعد",ph_sched:"عنصر نائب · المواعيد",bk_card_why:"السبب: {why}",bk_card_note:"أُضيف إلى سجلاتي ورعايتي. سأذكّرك في المساء السابق.",bk_card_note_norec:"أُضيف إلى رعايتي. سأذكّرك في المساء السابق."});
 /* rendering */
 function simBubble(html,typing,cls){const g=gen;later(()=>new Promise(r=>{const ty=add("agent typing",'<span class="dots"><i></i><i></i><i></i></span>');const ts=ty.querySelector(".ts");if(ts)ts.remove();
   setTimeout(()=>{ty.remove();if(g===gen)add("agent "+(cls||""),html);r()},reduced?100:Math.max(350,Math.min(1500,typing||700)))}))}
@@ -1472,7 +1491,7 @@ document.getElementById("msgs").addEventListener("click",e=>{const c=e.target.cl
   const s=e.target.closest("[data-sample]");if(s){const n=s.closest(".fac").querySelector(".fac-note");if(n)n.hidden=false}});
 /* My Care: Sim outcomes, kept apart from the health profile and plan (SAF03) */
 function simRecord(m){if(!S.sim)return;const r=m.result,st=S.sim.state;const pw=SimBrain.PATHWAYS.find(p=>p.id===r.pathwayId);
-  S.care.unshift({id:"c"+Date.now(),date:now(),kind:m.kind,level:r.level,result:r,pathway:pw?pw.title:null,complaint:S.sim.complaint,trace:(st.assessment.trace||[]).slice()});
+  S.care.unshift({id:"c"+Date.now(),fresh:true,date:now(),kind:m.kind,level:r.level,result:r,pathway:pw?pw.title:null,complaint:S.sim.complaint,trace:(st.assessment.trace||[]).slice()});
   addUpdate(()=>r.level?`Sim · ${sl(SimBrain.LEVEL_META[r.level].short)}`:`Sim · ${SU("outOfScopeTitle")}`);renderHQ();flashHQ()}
 const lvCls=l=>!l?"p-mute":l>=5?"p-bad":l===4?"p-bad":l===3?"p-warn":l===2?"p-info":"p-good";
 function careTitle(c){return c.level?sl(SimBrain.LEVEL_META[c.level].label):SU("outOfScopeTitle")}
@@ -1481,7 +1500,7 @@ function hqCare(){let h=`<div><h2>${t("hq_care")}</h2></div><p class="hq-sub">${
   if(!S.care.length)return h+`<div class="empty">${t("care_empty")}</div>`;
   return h+S.care.map(c=>`<div class="panel carelv lv${c.level||0}"><div class="card-h"><h3>${esc(c.pathway?sl(c.pathway):"Sim")} · ${fmtDate(c.date)} ${fmtTime(c.date)}</h3><span class="pill ${lvCls(c.level)}">${careShort(c)}</span></div>
    <div style="font-weight:600;color:var(--brand);font-size:15px">${esc(careTitle(c))}</div>${c.complaint?`<div class="note">${t("care_said")}: “${esc(c.complaint)}”</div>`:""}
-   <p style="margin:0;font-size:13.5px">${esc(sl(c.result.rationale))}</p><div class="note mono" dir="ltr">${esc(c.result.ruleId)} · ${esc(c.result.pathwayId||"")} v${esc(c.result.pathwayVersion||c.result.protocolVersion||"")}</div>
+   <p style="margin:0;font-size:13.5px">${esc(sl(c.result.rationale))}</p>${c.appt?`<div style="font-size:13.5px;font-weight:600">📅 ${t("bk_card_t")}: ${esc(c.appt.doc)} · ${careWhen(c.appt.start)}</div>`:""}<div class="note mono" dir="ltr">${esc(c.result.ruleId)} · ${esc(c.result.pathwayId||"")} v${esc(c.result.pathwayVersion||c.result.protocolVersion||"")}</div>
    <details class="trace"><summary>${t("care_trace")}</summary><ol>${c.trace.map(x=>`<li><span class="mono">${esc(x.kind)}</span> ${esc(x.detail)}</li>`).join("")}</ol></details></div>`).join("")}
 function carePanel(){const c=S.care[0];if(!c)return"";return`<div class="panel carelv lv${c.level||0}"><div class="card-h"><h3>${t("care_latest")}</h3><span class="pill ${lvCls(c.level)}">${careShort(c)}</span></div><div style="font-weight:600;color:var(--brand)">${esc(careTitle(c))}</div><div class="note">Sim · ${fmtTime(c.date)}</div><button class="linkbtn" data-goto="care" style="align-self:flex-start">${t("hq_care")} →</button></div>`}
 Object.assign(L.en,{tri_back_to:"Let's pick up where we left off."});Object.assign(L.es,{tri_back_to:"Sigamos donde nos quedamos."});Object.assign(L.ar,{tri_back_to:"لنكمل من حيث توقفنا."});
@@ -5705,7 +5724,7 @@ function recipeHTML(inChat){const r=S.recipe;if(!r)return"";const all=[...(r.p?[
   <div class="sec">${t("ingredients")}</div><ul class="plain">${all.map(k=>`<li>${ingName(k)}${r.miss.includes(k)?` <span class="pill p-mute">${t("missing_items")}</span>`:""}</li>`).join("")}</ul>
   <div class="sec">${t("steps")}</div><ol><li>${t("st1",{v:vnames})}</li><li>${r.p?t("st2",{p:ingName(r.p)}):t("st2np")}</li><li>${t("st3")}</li><li>${r.c?t("st4",{c:ingName(r.c)}):t("st4nc")}</li></ol>`}
 function coreDone(){S.coreDone=true;bot(t("core_done"));coreReplies()}
-function coreReplies(){replies([[t("chg_btn"),askNewTime],[t("recap_btn"),recap],[t("tri_check"),pickSymptom],[t("hq_btn"),()=>{setView("hq");coreReplies()},{silent:true}]])}
+function coreReplies(){replies([[t("chg_btn"),askNewTime],[t("recap_btn"),recap],[t("tri_check"),pickSymptom],[t("hq_btn"),()=>{setView("hq");coreReplies()},{silent:true}],[t("x_m_more"),()=>v3Menu(),{silent:true}]])}
 function askNewTime(){bot(t("ask_new"));replies([5,10,15].map(m=>[t("m"+m),()=>{adapt(m,"chat");coreReplies()}]))}
 
 /* adaptation */
@@ -5812,6 +5831,7 @@ Object.assign(L.ar,{back_to_it:"والآن، لنعد إلى ما كنا فيه.
 $("#composer").addEventListener("submit",e=>{e.preventDefault();const x=$("#inp").value.trim();if(!x)return;$("#inp").value="";const el=user(esc(x));smartRoute(x,el)});
 function route(x,el){
   if(S.sim){S.rx.turn++;simStep({type:"USER_TEXT",text:x},{dropUserEcho:x});return}
+  if(typeof v3Route==="function"&&v3Route(x))return;
   const sens=rxSensitive(x),off=RX_OFF.test(x),on=!off&&RX_ON.test(x);
   const topic=(sens||off||on||isRecQuestion(x))?null:(S.await==="meal"?"meals":S.await==="ing"?"grocery":S.await==="allergy"?null:(S.name?rxTopic(x):null));
   maybeReact(el,x,topic);
@@ -5855,7 +5875,7 @@ const stPill=s=>pill("st_"+s,{proposed:"p-mute",accepted:"p-info",active:"p-good
 const kindKey=k=>({move:"k_move",food:"k_food",recipe:"k_recipe",checkin:"k_checkin",sleep:"k_sleep"}[k]);
 function renderHQ(){const un=$("#uName");if(un){un.textContent=S.name||t("hq_member");$("#uAv").textContent=(S.name||t("hq_member")).trim().charAt(0).toUpperCase()}
   document.querySelectorAll("#hqNav button[data-tab]").forEach(b=>b.setAttribute("aria-current",b.dataset.tab===S.hqTab?"page":"false"));
-  hqMain.innerHTML={overview:hqOverview,plan:hqPlan,profile:hqProfile,files:hqFiles,care:hqCare,records:hqRecords,devices:hqDevices,insurance:hqInsurance}[S.hqTab]();
+  hqMain.innerHTML={overview:hqOverview,plan:hqPlan,profile:hqProfile,files:hqFiles,care:hqCare,records:hqRecords,devices:hqDevices,insurance:hqInsurance,...(window.V3TABS||{})}[S.hqTab]();if(window.v3AfterHQ)v3AfterHQ();
   if(S.flashAct){const el=hqMain.querySelector(`[data-act="${S.flashAct}"]`);if(el){el.classList.add("flash")}S.flashAct=null}
 }
 function flashHQ(){if($("#stage").dataset.view==="chat"&&innerWidth<=900)$("#hqDot").hidden=false}
@@ -6003,6 +6023,802 @@ setLang("en");start();fitPhone();setTimeout(fitPhone,600);if(document.fonts&&doc
 $("#mtChat").addEventListener("click",()=>setTimeout(fitPhone,0));
 </script>
 
+<style>
+/* ===== ELIA v3 prototype: circles, challenges, rewards, prevention, medication, privacy, ministry view ===== */
+.x-card{border:1px solid var(--line);border-radius:14px;padding:11px 12px;background:var(--surface);display:flex;flex-direction:column;gap:7px;margin-block:2px}
+.x-card p{margin:0}
+.x-card.x-agent{border-color:color-mix(in srgb,var(--info) 45%,var(--line));background:color-mix(in srgb,var(--info-bg) 55%,var(--surface))}
+.x-card.x-alert{border-color:color-mix(in srgb,var(--warn) 50%,var(--line));background:color-mix(in srgb,var(--warn-bg) 55%,var(--surface))}
+.x-card.x-urgent{border-color:var(--bad);background:var(--bad-bg)}
+.x-eyebrow{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;font-weight:700;color:var(--teal)}
+.x-agent .x-eyebrow{color:var(--info)}.x-alert .x-eyebrow{color:var(--warn)}.x-urgent .x-eyebrow{color:var(--bad)}
+[lang="ar"] .x-eyebrow{letter-spacing:0}
+.x-note{font-size:12px;color:var(--muted);line-height:1.4}
+.x-kv{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 12px;font-size:13px}
+.x-kv>:nth-child(odd){color:var(--muted)}
+.x-lines{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px;font-size:13.5px}
+.x-lines li{display:flex;gap:8px;align-items:baseline;justify-content:space-between}
+.x-lines li>span:first-child{min-width:0;flex:1}
+.x-pts{font-family:var(--f-mono);font-size:12px;font-weight:500;color:var(--good);white-space:nowrap}
+.x-pts.neg{color:var(--muted)}
+.x-ver{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;border-radius:999px;padding:2px 8px;white-space:nowrap}
+.x-ver.v{background:var(--good-bg);color:var(--good)}.x-ver.s{background:var(--surface-2);color:var(--muted);border:1px solid var(--line)}
+.x-bar{height:8px;border-radius:999px;background:var(--track);overflow:hidden;min-width:60px;flex:1}
+.x-bar>i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--brand-2),var(--teal-bright))}
+.x-bar.warn>i{background:var(--warn)}.x-bar.bad>i{background:var(--bad)}
+.x-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.x-row.sp{justify-content:space-between}
+.x-grow{flex:1;min-width:0}
+.x-big{font-family:var(--f-display);font-size:30px;font-weight:600;color:var(--brand);line-height:1;font-variant-numeric:tabular-nums}
+.x-unit{font-size:12.5px;color:var(--muted)}
+.x-av{width:30px;height:30px;border-radius:50%;background:var(--mint);color:var(--teal);display:inline-grid;place-items:center;font-weight:700;font-size:13px;flex:none}
+.x-av.me{background:var(--brand-fill);color:#fff}
+.x-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.x-list>li{display:flex;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line);font-size:13.5px;flex-wrap:wrap}
+.x-list>li:first-child{border-top:0}
+.x-list small{display:block;color:var(--muted);font-size:12px}
+.x-rank{font-family:var(--f-mono);font-size:12px;color:var(--muted);width:1.6em;text-align:center;flex:none}
+.x-btn{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:999px;padding:5px 12px;font-size:12.5px;font-weight:600}
+.x-btn:hover{border-color:var(--teal);color:var(--teal)}
+.x-btn.pri{background:var(--teal);border-color:var(--teal);color:#fff}.x-btn.pri:hover{filter:brightness(1.08);color:#fff}
+.x-btn.danger:hover{border-color:var(--bad);color:var(--bad)}
+.x-btn[disabled]{opacity:.5;pointer-events:none}
+.x-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.x-tile{border:1px solid var(--line);border-radius:var(--r);padding:14px;background:var(--surface);display:flex;flex-direction:column;gap:4px;min-width:0}
+.x-tile b{font-family:var(--f-display);font-size:24px;font-weight:600;color:var(--brand);font-variant-numeric:tabular-nums;line-height:1.1}
+.x-tile span{font-size:12px;color:var(--muted)}
+.x-tile em{font-style:normal;font-size:11.5px;color:var(--good);font-weight:600}
+.x-table{width:100%;border-collapse:collapse;font-size:13px}
+.x-table th{text-align:start;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+[lang="ar"] .x-table th{letter-spacing:0}
+.x-table td{padding:8px;border-bottom:1px solid var(--line);vertical-align:middle}
+.x-table td.n,.x-table th.n{text-align:end;font-variant-numeric:tabular-nums}
+.x-table tr:last-child td{border-bottom:0}
+.x-scroll{overflow-x:auto;max-width:100%}
+.x-sw{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line)}
+.x-sw:first-of-type{border-top:0}
+.x-sw>div{flex:1;min-width:0;font-size:13.5px}.x-sw small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+.x-tog{flex:none;width:42px;height:24px;border-radius:999px;border:1px solid var(--line);background:var(--track);position:relative;padding:0;transition:background .15s}
+.x-tog::after{content:"";position:absolute;top:2px;inset-inline-start:2px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:inset-inline-start .15s}
+.x-tog[aria-checked="true"]{background:var(--teal);border-color:var(--teal)}
+.x-tog[aria-checked="true"]::after{inset-inline-start:20px}
+.x-tog[disabled]{opacity:.55}
+.x-form{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.x-form input,.x-form select,.min-filters select,.min-form input,.min-form select{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:10px;padding:7px 10px;font:inherit;font-size:13px;min-width:0}
+.x-form input{width:9.5em}
+.x-h3 select{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:10px;padding:6px 10px;font:inherit;font-size:13px;max-width:100%}
+#minView h3{margin:0;font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:700;font-family:var(--f-body)}
+[lang="ar"] #minView h3{letter-spacing:0}
+.x-spark{width:100%;height:46px;display:block}
+.x-h3{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.x-h3 h3{margin:0}
+.x-sig{border-inline-start:3px solid var(--warn);padding-inline-start:10px;display:flex;flex-direction:column;gap:3px;font-size:13.5px}
+.x-sig.ok{border-color:var(--good)}.x-sig.urgent{border-color:var(--bad)}
+.x-code{font-family:var(--f-mono);font-size:13px;background:var(--surface-2);border:1px dashed var(--line);border-radius:8px;padding:5px 9px;user-select:all;display:inline-block}
+.x-vtag{font-size:10.5px;font-weight:700;letter-spacing:.06em;border:1px solid color-mix(in srgb,var(--teal) 50%,transparent);color:var(--teal);border-radius:999px;padding:2px 8px;text-transform:uppercase}
+.hq-nav .x-sep{font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);padding:10px 12px 2px;font-weight:600}
+[lang="ar"] .hq-nav .x-sep{letter-spacing:0}
+/* Ministry and sponsor view */
+#minView{position:fixed;inset:0;z-index:30;background:var(--bg);overflow:auto;padding:max(18px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) 40px max(16px,env(safe-area-inset-left,0px))}
+.min-wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+.min-head{display:flex;gap:14px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.min-head h1{font-family:var(--f-display);font-weight:600;font-size:24px;margin:0;color:var(--brand);text-wrap:balance}
+.min-head p{margin:4px 0 0;color:var(--muted);font-size:13.5px;max-width:62ch}
+.min-role{font-size:12px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.min-filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--muted)}
+.min-filters label{display:flex;gap:6px;align-items:center}
+.min-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px}
+.min-bars{display:flex;flex-direction:column;gap:7px;font-size:13px}
+.min-bars>div{display:grid;grid-template-columns:minmax(8.5em,11em) minmax(0,1fr) 4.2em;gap:10px;align-items:center}
+.min-bars .v{text-align:end;font-variant-numeric:tabular-nums;font-family:var(--f-mono);font-size:12px}
+.min-bars .sup{color:var(--muted);font-size:12px;grid-column:2/4}
+.min-stack{display:flex;height:16px;border-radius:999px;overflow:hidden;background:var(--track)}
+.min-stack i{display:block;height:100%}
+.min-leg{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.min-leg span::before{content:"";display:inline-block;width:9px;height:9px;border-radius:2px;margin-inline-end:5px;background:var(--c)}
+.min-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;align-items:end}
+.min-form label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+.min-note{font-size:12px;color:var(--muted);border:1px dashed var(--line);border-radius:12px;padding:10px 12px;background:var(--surface-2);line-height:1.5}
+@media (max-width:900px){.min-grid{grid-template-columns:minmax(0,1fr)}.min-bars>div{grid-template-columns:minmax(6.5em,8em) minmax(0,1fr) 3.6em}}
+</style>
+<script>
+const X_EN={
+nav_sep:"New in v3",nav_circle:"My Circle",nav_rewards:"Rewards",nav_prev:"Prevention",nav_meds:"Medication",nav_privacy:"Privacy",
+min_btn:"Ministry view",next_day:"Next day",next_week:"Skip a week",m_more:"Circle, rewards and more",
+p_circle:"Wellness circle",p_incoming:"Incoming challenge",p_signal:"Proactive alert",p_gap:"Care gap nudge",p_meds:"Medication reminder",p_reading:"Log a home reading",p_week:"Weekly review",p_pop:"National challenge invite",p_week7:"Skip a week",
+menu:"Here is what else I can do with you. Pick one.",m_circle:"My wellness circle",m_gaps:"Check-ups due",m_meds:"Medication",m_reading:"Log BP or glucose",m_week:"Weekly review",m_rewards:"Rewards",m_back:"Back",
+you:"You",today:"Today",pts:"pts",bpm:"bpm",min:"min",open:"Open",on:"on",off:"off",sure:"Tap again to confirm",toggle:"Switch",notnow:"Not now",later_btn:"Later",cancel:"Cancel",change:"Change it",accept:"Accept",decline:"Decline",approve_send:"Approve and send",open_privacy:"Open privacy settings",n_days:"{n} days",d7:"7 days",d14:"14 days",
+k_with:"With",k_len:"Length",k_mode:"Format",k_proof:"Counted by",k_shared:"Shared",k_notshared:"Never shared",k_when:"Delivery",k_team:"Your team",
+ver_wear:"Verified by wearable",ver_phone:"Verified by phone",ver_photo:"Verified by photo",ver_clinic:"Verified by clinic",ver_self:"Self-reported",ver_prog:"Programme",
+rel_spouse:"spouse",rel_brother:"brother",rel_sister:"sister",rel_friend:"friend",rel_colleague:"colleague",
+/* circles */
+c_family:"Family",c_friends:"Friends",c_work:"Colleagues",
+c_intro:"A wellness circle is a small group of people you choose, up to 12. You set goals together and I coordinate with each person's own ELIA. Nobody in a circle ever sees your health data, scores or conversations. Who is this circle for?",
+c_who:"Who should I invite? Tap everyone you want, then send.",c_invite_go:"Send invitations",c_pick_one:"Pick at least one person first.",
+c_share_q:"What may this circle see about you?",c_share_prog:"Challenge progress only",c_share_steps:"Progress and daily step count",
+c_sent:"Done. I've asked {n} people's ELIA to pass on your invitation. They see your first name and the circle's name, nothing else, and they can say no without you being told why.",
+c_joined:"{who} joined your circle",c_next:"Your circle is ready. A shared goal is the best way to start. Want to set one?",
+c_home:"Your {name} circle has {n} other members. What would you like to do?",c_board:"Open My Circle",c_auto:"Demo: a family circle was created with Fatma, Salim and Maryam",
+c_off:"Circles are switched off in your privacy settings, so I'm not sharing anything with anyone.",
+ch_new:"Start a challenge",ch_nobody:"Nobody has joined this circle yet. I'll let you know when someone accepts.",ch_pick:"Which goal? Each person is measured against their own target, so a beginner and an athlete can win the same challenge.",
+tpl_steps:"Walk more together",tpl_active:"150 active minutes a week",tpl_sleep:"Regular bedtime",tpl_veg:"Five vegetables and fruits a day",
+ch_dur:"For how long?",ch_mode:"Work toward one shared goal, or a friendly ranking?",mode_team:"One shared goal",mode_rank:"Friendly ranking",
+ch_draft:"Challenge to approve",ch_fair:"Scores are a percentage of each person's own daily goal. Raw numbers are not shown unless a member chose to share steps.",
+ch_sent:"Sent. Each person's ELIA will bring it up at a good moment for them.",ch_acc:"{who} accepted",ch_starts:"It starts today. I'll count what your devices verify and give you one update each morning.",
+via_agent:"Via {name}'s ELIA",in_chal:"{name} invites you and the circle to a challenge: <b>{what}</b>.",shared_prog:"Your progress as a percentage",
+in_yes:"You're in. I told {name}'s ELIA.",in_no:"No problem. I let {name}'s ELIA know, without a reason.",in_later:"I'll ask again tomorrow.",
+ev_joined:"{name} joined “{what}”",ev_prog_team:"“{what}”, day {day} of {days}: the circle is at {pct}% of the shared goal",ev_prog_rank:"“{what}”, day {day} of {days}: you are at {pct}% of your own goal",
+ev_done_team:"“{what}” is finished: the circle reached {pct}%. Well done, all of you.",ev_miss_team:"“{what}” is finished at {pct}%. Not the goal this time, and the days you did still count.",
+ev_done_rank:"“{what}” is finished: you averaged {pct}% of your goal.",ev_miss_rank:"“{what}” is finished: you averaged {pct}% of your goal. Want a gentler target next time?",
+/* relay */
+r_send:"Message someone",r_who:"Who is it for?",r_what:"What should I pass on to {name}? Type it, or pick one.",r_s1:"Walk together after dinner tonight?",r_s2:"Great job this week. Keep going!",r_s3:"Thinking of you. How are you doing?",
+r_draft:"Message to {name}",r_only:"Only this message",r_never:"Your health data, scores and location",r_goodtime:"When {name} is free, never in quiet hours",
+r_delivered:"Delivered to {name}'s ELIA",r_reply1:"Yes! After Maghrib works for me.",r_reply2:"Thank you, that made my day.",r_reply3:"All good here. Let's catch up on Friday.",r_again:"Send another",
+r_limit:"You've reached today's limit of 5 relayed messages. It keeps circles from turning into a group chat.",r_muted:"{name} has paused messages from the circle for now.",
+r_abuse:"I won't pass that on. Messages through me have to be kind. Try another wording.",r_health:"That mentions health details. Once I pass it on, the other person can see it. Share it as written?",r_health_ok:"Yes, share as written",r_rewrite:"Rewrite it",
+co_find:"Find a time together",co_who:"Who do you want to meet?",co_working:"Asking {name}'s ELIA when you are both free…",co_found:"Times that work for you and {name}",co_privacy:"The two assistants compared free and busy times only. No calendar details were exchanged.",
+co_done:"Booked: a walk with {name}, {when}. Both of you will get a reminder an hour before.",up_walk:"Walk with {name}: {when}",
+/* proactive */
+sim_morning:"Simulated: {when}, 7:10 am",sim_day:"Simulated: the next morning, {when}",sim_later:"Simulated: 40 minutes later",
+sg_eyebrow:"I noticed something",sg_recovery:"{name}, three nights in a row your body has been working harder than usual while you sleep.",
+sg_rhr:"Resting heart rate vs your baseline",sg_sleep:"Sleep vs your usual",sg_hrv:"Heart rate variability",sg_src:"Source: {src}. Confidence: moderate. This is a pattern, not a diagnosis.",src_wear:"your connected wearable",src_sim:"simulated wearable data",
+sg_q:"This pattern often shows up with stress, a late heavy meal, or the start of an illness. How are you feeling today?",sg_fine:"I feel fine",sg_off:"A bit off",sg_sym:"Check a symptom",sg_why:"Why are you telling me?",
+sg_why_msg:"You asked me to watch your recovery signals. I only speak up when three or more signals move together for several days, at most once a day, and never during quiet hours. You can switch this off under Privacy.",
+sg_fine_msg:"Good. I'd still make today a lighter day so your body can catch up.",sg_off_msg:"Thanks for telling me. Let's take the load off today, and if anything specific is bothering you I can check it with you.",
+sg_easy:"Make today lighter",sg_easy_msg:"Done: a 10-minute easy walk instead of today's session, and lights out 30 minutes earlier. I'll look at tonight's numbers and tell you tomorrow.",sg_keep:"Keep my plan",sg_keep_msg:"Understood. I'll keep watching and only come back if it continues.",
+sg_cap:"ELIA already raised one signal today. It holds anything further until tomorrow unless it is urgent.",sg_consent:"Proactive alerts need coaching and wearable data switched on in your privacy settings.",
+sgt_recovery:"Recovery signals off baseline",sgs_open:"waiting for your answer",sgs_adjusted:"plan lightened",sgs_watch:"watching",sgs_triage:"symptom check started",sgs_resolved:"back to baseline",
+ev_signal:"Your recovery signals are back to your baseline",up_easy:"Today lightened after a recovery signal",
+/* meds */
+med_met:"Metformin",med_ator:"Atorvastatin",md_sched_1:"Once a day, in the evening",md_sched_2:"Twice a day, with breakfast and dinner",
+md_eyebrow:"Medication reminder",md_when:"Time for your morning dose, with breakfast.",md_when_ram:"Ramadan mode: your reminder is moved to iftar. Ask your doctor before changing how you take any medicine while fasting.",
+md_safe:"I remind and keep track. I never change a dose: that is for your doctor or pharmacist.",md_taken:"Taken",md_skip:"Skipping this one",md_open:"Open Medication",md_log:"Log a dose",
+md_taken_msg:"Logged.",md_low:"You have about {n} days of {med} left. Shall I ask the pharmacy for a refill?",md_refill:"Request a refill",md_refill_msg:"Refill request for {med} sent to your pharmacy. You'll get a message when it is ready to collect.",
+md_skip_q:"No judgement. What got in the way?",md_r_forgot:"I forgot",md_r_side:"Side effects",md_r_out:"I ran out",md_r_fast:"I'm fasting",
+md_forgot_msg:"It happens. I'll tie the reminder to breakfast instead of a clock time. If you remember within a few hours, check the leaflet or ask your pharmacist whether to take it late.",
+md_side_msg:"Please don't stop on your own. Side effects are a reason to talk to a professional, and there is often an easy fix. I can ask a nurse to call you.",
+md_fast_msg:"Fasting can change when and how medicines should be taken, and for some people fasting needs medical advice first. I can ask a nurse to call you to plan it safely.",
+md_adh:"taken, last 14 days",md_left:"About {n} days left",md_refill_sent:"Refill requested",md_low_pill:"Running low",ev_refill:"Your {med} refill is ready to collect",
+md_title:"Medication and home readings",md_sub:"Reminders, refills and the readings you take at home. ELIA tracks and flags; your care team decides.",
+md_note:"Medication list and thresholds are demo values. In production the list comes from your health record and the thresholds are set by the programme's clinical lead.",
+rd_ask:"Send me a reading, for example “BP 128/82” or “glucose 6.4”. Or pick a sample.",rd_g1:"Glucose 6.1",rd_g2:"Glucose 14.8",rd_bad:"I couldn't read that. Try “BP 128/82” or “glucose 6.4”.",rd_recheck:"Log another reading",
+rd_bp_ok:"{v} logged. That is in your target range.",rd_bp_high:"{v} logged. That is above your target. One high reading is not a reason to worry. Sit quietly for five minutes and measure again, then again tomorrow morning.",
+rd_bp_trend:"{v} logged. That is your {n}th high reading this week, so it is time for your doctor to look at it. I can book it.",
+rd_bp_crisis:"{v} is very high. Sit down, rest for five minutes and measure again. If you also have chest pain, shortness of breath, a severe headache, weakness, confusion or a change in vision, call 9999 now.",
+rd_glu_ok:"{v} mmol/L logged. That is in range.",rd_glu_above:"{v} mmol/L logged. A little above target, which often follows a meal. I'll watch the trend.",
+rd_glu_high:"{v} mmol/L is high. Drink water, avoid sugary food, and measure again in two hours. If it stays this high or you feel unwell, your care team should know today.",
+rd_glu_vhigh:"{v} mmol/L is very high. If you feel sick, are vomiting, very thirsty, drowsy or breathing fast, call 9999 or go to emergency now. Otherwise measure again in an hour and let me bring in a nurse.",
+rd_glu_low:"{v} mmol/L is low. Have 15 g of fast sugar now (half a glass of juice or 3 dates), wait 15 minutes and measure again.",
+rd_glu_vlow:"{v} mmol/L is very low. Take fast sugar now and do not stay alone. If you feel confused or faint, or it does not come up in 15 minutes, call 9999.",
+rd_bp:"Blood pressure",rd_glu:"Blood glucose",rd_add:"Add",rd_bp_note:"Dashed line: 140 mmHg systolic.",rd_glu_note:"Dashed line: 10 mmol/L.",rd_p_ok:"In range",rd_p_high:"Above target",rd_p_urgent:"Needs attention",
+/* escalation */
+esc_title:"Escalations",esc_none:"Nothing has needed escalating.",esc_ladder:"ELIA's ladder: self-care advice, a watch period, nurse callback, doctor appointment, emergency services. Each step is logged and you can see it here.",
+esc_l1:"self-care advice",esc_l2:"watching",esc_l3:"care team",esc_l4:"urgent",esc_l5:"emergency",esc_logged:"Logged",esc_urgent:"Urgent",esc_act:"Act now",
+esc_k_bp_crisis:"Very high blood pressure reading",esc_k_bp_trend:"Repeated high blood pressure",esc_k_glu_low:"Low glucose reading",esc_k_glu_high:"High glucose reading",esc_k_callback:"Nurse callback requested",
+esc_nurse:"Ask a nurse to call me",esc_share_q:"May I share your last 14 days of readings and medication log with the nurse, so you don't have to repeat it?",esc_share_yes:"Yes, share them",esc_share_no:"No, just the callback",
+esc_cb_msg:"Callback requested. A programme nurse will call you within 2 hours, between 8 am and 8 pm.",esc_cb_shared:"Shared for this call only: 14 days of readings and medication log. Recorded in your access log.",esc_cb_notshared:"Nothing was shared. The nurse will ask you directly.",
+ph_nurse:"Placeholder · Nurse line",ph_pharm:"Placeholder · Pharmacy",ph_sched:"Placeholder · Scheduling",ph_sponsor:"Placeholder · Sponsor catalogue",
+/* gaps */
+gp_due:"Due soon",gp_overdue:"Overdue",gp_basis:"Based on",gp_reward:"Attending earns 50 points once the clinic confirms it.",gp_book:"Book it",gp_done:"Already done",gp_later:"Remind me later",gp_all:"See all check-ups",
+gp_none:"You're up to date on every check-up I track.",gp_later_msg:"I'll bring it up again in two weeks.",gp_slots:"Here are the next times at your clinic.",gp_booked_note:"Added to your care record. Points are added after the clinic confirms you attended.",
+gp_done_q:"Good. Roughly when?",gp_w1:"This month",gp_w2:"In the last 3 months",gp_w3:"Longer ago",gp_done_msg:"Marked as done from your report. Upload the result under My Files and I'll mark it verified.",gp_old_msg:"Then it is due again.",
+gp_st_done:"Done",gp_st_booked:"Booked",gp_st_ok:"Up to date",gp_st_snoozed:"Snoozed",up_booked:"Booked: {what}",ev_gap:"The clinic confirmed your visit: {what}",
+gap_a1c:"HbA1c blood test",gap_a1c_why:"Shows your average blood sugar over three months. It tells us whether the plan is working.",gap_a1c_src:"ADA Standards of Care: at least yearly with prediabetes, twice a year with diabetes",
+gap_eye:"Diabetic eye exam",gap_eye_why:"Diabetes can damage the retina long before vision changes. An exam catches it early.",gap_eye_src:"ADA Standards of Care: every 1 to 2 years",
+gap_kidney:"Kidney check (urine and blood)",gap_kidney_why:"A urine albumin and kidney function test finds early kidney strain, when it is still reversible.",gap_kidney_src:"ADA Standards of Care: yearly with type 2 diabetes",
+gap_lipid:"Cholesterol panel",gap_lipid_why:"Cholesterol and blood sugar raise heart risk together. This guides whether treatment needs adjusting.",gap_lipid_src:"ADA and ACC/AHA guidance: yearly when on treatment",
+gap_flu:"Seasonal flu vaccine",gap_flu_why:"Flu is harder on people with raised blood sugar. One injection covers the season.",gap_flu_src:"WHO seasonal influenza recommendations for adults with chronic conditions",
+gap_crc:"Colorectal cancer screening",gap_crc_why:"A simple stool test at home is the usual first step from age 45.",gap_crc_src:"USPSTF: adults 45 to 75",
+gap_bpc:"Blood pressure check",gap_bpc_why:"Covered by the readings you take at home.",gap_bpc_src:"USPSTF: yearly from age 40",gap_bpv:"Blood pressure review with your doctor",
+pv_title:"Prevention",pv_sub:"Check-ups, screenings and vaccines that are due for someone with your age and health history.",pv_open:"due now",pv_booked:"booked",pv_done:"up to date",
+pv_note:"Which checks appear, and how often, is a demo rule set built from published guidelines. Your programme's clinical lead owns the schedule. ELIA reminds and books; it does not order tests.",
+/* weekly */
+wk_eyebrow:"Your week",wk_steps:"Average steps a day",wk_days:"Days at your {t}-step goal",wk_meds:"Medication taken",wk_pts:"Points earned",wk_up:"That is {d} more steps a day than the week before.",wk_down:"That is {d} fewer steps a day than the week before.",
+wk_nostreak:"Missed days don't reset anything. There are no streaks here.",wk_q_hard:"You hit your goal most days. Ready for a slightly bigger one?",wk_q_easy:"This goal was hard to reach this week. A smaller one you hit beats a bigger one you miss.",wk_q_keep:"A solid week. Keep the goal or change it?",
+wk_keep:"Keep it",wk_easier:"Make it easier",wk_harder:"Make it harder",wk_keep_msg:"Same goal next week.",wk_set:"Your new daily goal is {t} steps.",up_target:"Daily step goal set to {t}",
+mu_eyebrow:"Morning update",mu_steps:"Yesterday: {n} steps",mu_hit:"You reached your {t}-step goal.",mu_miss:"Your goal is {t} steps. Yesterday still counts toward your week.",
+/* rewards */
+rw_title:"Rewards",rw_sub:"Points for actions that can be confirmed. Verified actions earn more than self-reported ones.",rw_balance:"Your balance",rw_cap:"{n} of {cap} daily points earned today. Check-ups and challenges are not capped.",rw_nostreak:"No streaks and no penalties. Points never expire during the programme year.",
+rw_how:"How points are earned",rw_how_note:"Point values are set by the sponsor and can differ by programme.",rw_catalog:"Redeem",rw_redeem:"Redeem",rw_mine:"Your vouchers",rw_ledger:"Points history",rw_redeemed:"Redeemed",rw_bal:"You have {n} points.",
+col_date:"Date",col_what:"Action",col_proof:"Proof",
+p_steps:"Daily step goal reached",p_meal:"Balanced meal logged",p_med:"Medication dose logged",p_welcome:"Welcome bonus",p_chal:"Challenge completed",p_reading:"Home reading logged",p_gap:"Check-up attended",p_gap_self:"Check-up reported",
+rwd_pharm:"Pharmacy voucher, OMR 5",rwd_pharm_d:"At partner pharmacies. Not valid for tobacco products.",rwd_grocery:"Healthy grocery voucher, OMR 8",rwd_grocery_d:"Fresh produce, fish and whole grains at partner supermarkets.",
+rwd_gym:"Gym or pool day pass",rwd_gym_d:"One visit at a partner fitness centre.",rwd_charity:"Donate to the Oman Diabetes Association",rwd_charity_d:"The sponsor donates OMR 3 on your behalf.",rwd_visit:"Wellness visit fee waiver",rwd_visit_d:"One follow-up visit at a programme clinic at no charge.",
+/* circle tab */
+ci_title:"My Circle",ci_sub:"People you chose, shared goals, and messages passed between your assistants.",ci_empty:"You don't have a circle yet. Start one with family or friends.",ci_start:"Start a circle",ci_members:"{n} members",ci_owner:"Circle owner",
+ci_joined:"joined",ci_invited:"invited, waiting",ci_removed:"removed",ci_blocked:"blocked",ci_muted:"muted",ci_mute:"Mute",ci_unmute:"Unmute",ci_remove:"Remove",ci_block:"Block",ci_unblock:"Unblock",ci_leave:"Leave this circle",
+ci_share_steps:"Share my daily step count with this circle",ci_share_note:"Off: members see only your challenge progress as a percentage.",ci_safe:"Adults only. Health records, scores, medication and location are never shared with a circle.",
+ci_day:"Day {d} of {n}",ci_team_goal:"of the shared goal",ci_days_in:"{n} goal days",ci_team_note:"A shared goal has no ranking. Everyone's goal days count the same.",ci_rank_note:"Ranked by percentage of each person's own goal, not by raw numbers.",ci_quit:"Leave challenge",
+ci_plans:"Planned together",ci_walk:"Walk with {name}",ci_agents:"arranged by your assistants",ci_relay:"Relayed messages",ci_to:"To {name}",ci_from:"From {name}",ci_report:"Report",ci_reported:"Reported",ci_relay_note:"Up to 5 relayed messages a day. Reports go to a human reviewer and the sender is not told who reported.",
+/* population */
+pop_title:"National and community challenges",pop_sub:"Run by the Ministry of Health and programme sponsors. Groups are ranked, never individuals.",pop_from:"Ministry of Health · national challenge",pop_invite:"You're invited to walk with your governorate. Your steps add to your team's total. One tap to join, one tap to leave.",
+pop_shared:"Your verified step total, added to your team's sum",pop_never:"Your name, your individual numbers, any health data",pop_join:"Join my governorate's team",pop_stop:"Stop these invitations",pop_joined:"You're on team {team}. Your verified steps count from today.",pop_declined:"No problem. I won't ask again for this one.",pop_stopped:"Done. I switched off programme invitations under Privacy. You can turn them back on there.",
+pop_blocked:"A national challenge invitation was not delivered: programme messages are switched off in this member's privacy settings.",pop_none:"There are no open invitations right now.",pop_board:"See the standings",pop_view:"View invitation",pop_leave:"Leave",pop_mine:"Your contribution: {n} steps",pop_yours:"Your team",pop_part:"{n} taking part",
+pop_note:"Standings use the average percentage of personal goal per participant, so large governorates have no advantage. Groups hidden for being too small: {n}.",
+/* privacy */
+pr_title:"Privacy and consent",pr_sub:"You decide what ELIA uses and who sees it. Every change takes effect at once and is written to your log.",pr_consents:"What you allow",
+cs_coach:"Personal coaching",cs_coach_d:"ELIA uses your answers, meals and plan to coach you. Needed for the service.",cs_wear:"Wearable and scan data",cs_wear_d:"Used for your plan, proactive alerts and verified points.",cs_records:"Health records",cs_records_d:"Lets ELIA read the records you connected, to find care gaps and answer questions.",
+cs_circle:"Wellness circles",cs_circle_d:"Lets you join circles. Circle members see challenge progress only.",cs_sponsor:"Programme reporting and invitations",cs_sponsor_d:"Your data is counted in group statistics for the Ministry and sponsor, never shown individually. Also allows national challenge invitations.",cs_research:"Research use",cs_research_d:"De-identified data may be used for approved research. Off by default.",
+pr_regional:"Regional settings",pr_ramadan:"Ramadan mode",pr_ramadan_d:"Moves reminders to suhoor and iftar, shifts activity to after iftar, and asks before any fasting-related medication question.",pr_quiet:"Quiet hours and prayer times",pr_quiet_d:"No messages from 10 pm to 7 am or during prayer times, except urgent safety messages.",pr_hijri:"Hijri date",
+pr_rights:"Your data",pr_export:"Download my data",pr_delete:"Request deletion",pr_delete_sent:"Deletion requested",pr_delete_note:"Your request is logged. Deletion is completed within 30 days and confirmed in writing.",
+pr_ai:"ELIA is an AI assistant. It gives wellness guidance, not a diagnosis, and a clinician reviews its clinical rules.",pr_law:"Handled under Oman's Personal Data Protection Law (Royal Decree 6/2022). Health data needs your explicit consent, which you can withdraw here.",
+pr_audit:"Access and activity log",pr_audit_note:"Shows who or what used your data, and every sharing decision you made.",
+a_consent:"Consents recorded at enrolment",a_consent_set:"Consent changed: {what} is now {state}",a_circle:"Circle created, {n} invitations sent",a_chal:"Challenge sent: {name}",a_relay:"Message relayed to {name}'s ELIA",a_coord:"Free/busy compared with {name}'s ELIA",a_esc:"Escalation logged (level {level})",
+a_share_nurse:"14 days of readings shared with the nurse line for one call",a_callback:"Nurse callback requested, nothing shared",a_refill:"Refill requested: {med}",a_book:"Appointment booked",a_pop:"Joined national challenge: {name}",a_remove:"{name} removed from circle",a_block:"{name} blocked",a_unblock:"{name} unblocked",
+a_share:"Circle sharing set to: {what}",a_leave:"Left a circle",a_quit:"Left a challenge",a_report:"Message from {name} reported",a_redeem:"Reward redeemed: {what}",a_delete:"Deletion requested",a_export:"Data export downloaded",a_min_view:"Programme analyst opened the aggregate dashboard (no individual data)",a_min_export:"Aggregate CSV exported by programme analyst",a_min_pop:"National challenge created: {name}",
+/* overview */
+ov_signals:"What ELIA noticed",ov_sim_signal:"Simulate an alert",ov_nosig:"Nothing unusual in your signals.",ov_sig_note:"ELIA speaks up at most once a day, only when several signals move together.",ov_next:"Coming up",ov_pts_note:"Rewards balance",ov_circle_note:"Start a circle with people you trust",
+/* ministry */
+min_tag:"Aggregate only",min_role:"Signed in as: programme analyst, Ministry of Health (demo role)",min_title:"National prevention programme",min_sub:"Group-level results for the ELIA programme. Every figure on this page is synthetic demo data.",min_csv:"Export CSV",min_close:"Back to member view",
+min_f_prog:"Programme",min_f_age:"Age",min_asof:"As of {when}",min_prog_all:"All programmes",min_prog_dpp:"Diabetes prevention",min_prog_htn:"Blood pressure",min_prog_weight:"Healthy weight",min_age_all:"All ages",min_age_a1:"18 to 34",min_age_a2:"35 to 49",min_age_a3:"50 to 64",min_age_a4:"65 and over",
+min_k_enrolled:"Members enrolled",min_k_active:"Active this week",min_pp:"points in 4 weeks",min_k_verified:"Verified actions this week",min_k_gaps:"Care gaps closed, year to date",min_k_high:"Members at high risk",min_k_cost:"Modelled cost avoided, OMR (estimate, not measured)",
+min_by_gov:"By governorate",min_metric_active:"Weekly active, %",min_metric_gaps:"Care gaps closed, %",min_metric_steps:"Average daily steps",min_metric_ver:"Verified actions per member per week",min_metric_esc:"Escalations per 1,000 members",
+min_metric_note_active:"Share of enrolled members with at least one verified action or conversation in the last 7 days.",min_metric_note_gaps:"Share of due check-ups that were attended and confirmed by a clinic.",min_metric_note_steps:"From members who share wearable or phone step data.",min_metric_note_ver:"Actions confirmed by a device, a photo or a clinic.",min_metric_note_esc:"Cases ELIA passed to a nurse, doctor or emergency services.",
+min_sup:"Hidden: fewer than {n} members",min_risk:"Risk distribution",min_r_low:"Low",min_r_rising:"Rising",min_r_high:"High",min_risk_note:"Risk tier from the programme's stratification rule. Counts only.",min_trend:"Weekly active, last 12 weeks",min_trend_note:"Percentage of enrolled members.",
+min_equity:"Who is taking part",min_e_w:"Women",min_e_m:"Men",min_equity_note:"Share of active members. Use it to spot groups the programme is not reaching.",
+min_pop:"National challenges",min_c_name:"Challenge",min_c_metric:"Goal",min_c_days:"Days",min_c_inv:"Invited",min_c_join:"Joined",min_c_lead:"Leading team",min_c_reward:"Completion points",min_ph_name:"e.g. Walk to National Day",min_create:"Create and invite",
+min_pop_note:"Invitations go only to members who allow programme messages. Teams are governorates; standings use average percentage of personal goal so population size does not decide the result.",
+min_protect:"How members are protected: this view holds counts and averages only. Any group with fewer than {n} members is hidden. There is no way to open an individual from here, exports contain the same aggregates, and every access is written to an audit log that members can see.",
+};
+for(const[k,v]of Object.entries(X_EN))L.en["x_"+k]=v;
+
+const X_AR={
+nav_sep:"جديد في الإصدار ٣",nav_circle:"دائرتي",nav_rewards:"المكافآت",nav_prev:"الوقاية",nav_meds:"الأدوية",nav_privacy:"الخصوصية",
+min_btn:"عرض الوزارة",next_day:"اليوم التالي",next_week:"تخطَّ أسبوعًا",m_more:"الدائرة والمكافآت والمزيد",
+p_circle:"دائرة العافية",p_incoming:"تحدٍّ وارد",p_signal:"تنبيه استباقي",p_gap:"تذكير بفحص مستحق",p_meds:"تذكير بالدواء",p_reading:"تسجيل قراءة منزلية",p_week:"المراجعة الأسبوعية",p_pop:"دعوة لتحدٍّ وطني",p_week7:"تخطَّ أسبوعًا",
+menu:"هذه أمور أخرى يمكنني مساعدتك فيها. اختر واحدًا.",m_circle:"دائرة العافية",m_gaps:"الفحوصات المستحقة",m_meds:"الأدوية",m_reading:"تسجيل الضغط أو السكر",m_week:"المراجعة الأسبوعية",m_rewards:"المكافآت",m_back:"رجوع",
+you:"أنت",today:"اليوم",pts:"نقطة",bpm:"نبضة/د",min:"دقيقة",open:"فتح",on:"مفعّل",off:"متوقف",sure:"اضغط مرة أخرى للتأكيد",toggle:"تبديل",notnow:"ليس الآن",later_btn:"لاحقًا",cancel:"إلغاء",change:"تعديل",accept:"قبول",decline:"رفض",approve_send:"موافقة وإرسال",open_privacy:"فتح إعدادات الخصوصية",n_days:"{n} يومًا",d7:"٧ أيام",d14:"١٤ يومًا",
+k_with:"مع",k_len:"المدة",k_mode:"الصيغة",k_proof:"طريقة الاحتساب",k_shared:"ما يُشارَك",k_notshared:"لا يُشارَك أبدًا",k_when:"التسليم",k_team:"فريقك",
+ver_wear:"موثّق بالساعة الذكية",ver_phone:"موثّق بالهاتف",ver_photo:"موثّق بالصورة",ver_clinic:"موثّق من العيادة",ver_self:"إفادة شخصية",ver_prog:"البرنامج",
+rel_spouse:"الزوجة",rel_brother:"الأخ",rel_sister:"الأخت",rel_friend:"صديق",rel_colleague:"زميل",
+c_family:"العائلة",c_friends:"الأصدقاء",c_work:"الزملاء",
+c_intro:"دائرة العافية مجموعة صغيرة من أشخاص تختارهم، حتى ١٢ شخصًا. تضعون أهدافًا مشتركة وأنا أنسّق مع إيليا الخاصة بكل شخص. لا يرى أحد في الدائرة بياناتك الصحية أو درجاتك أو محادثاتك. لمن هذه الدائرة؟",
+c_who:"من أدعو؟ اختر كل من تريد ثم أرسل.",c_invite_go:"إرسال الدعوات",c_pick_one:"اختر شخصًا واحدًا على الأقل أولًا.",
+c_share_q:"ما الذي يمكن لهذه الدائرة أن تراه عنك؟",c_share_prog:"التقدّم في التحديات فقط",c_share_steps:"التقدّم وعدد الخطوات اليومي",
+c_sent:"تم. طلبت من إيليا الخاصة بـ{n} أشخاص إيصال دعوتك. يرون اسمك الأول واسم الدائرة فقط، ويمكنهم الرفض دون أن تُبلَّغ بالسبب.",
+c_joined:"انضم إلى دائرتك: {who}",c_next:"دائرتك جاهزة. أفضل بداية هدف مشترك. هل تريد وضع هدف؟",
+c_home:"في دائرة {name} {n} أعضاء آخرين. ماذا تريد أن تفعل؟",c_board:"فتح دائرتي",c_auto:"عرض تجريبي: أُنشئت دائرة عائلية مع فاطمة وسالم ومريم",
+c_off:"الدوائر متوقفة في إعدادات الخصوصية، لذلك لا أشارك أي شيء مع أحد.",
+ch_new:"بدء تحدٍّ",ch_nobody:"لم ينضم أحد إلى هذه الدائرة بعد. سأخبرك عندما يقبل أحدهم.",ch_pick:"أي هدف؟ يُقاس كل شخص مقابل هدفه الخاص، فيمكن للمبتدئ والرياضي الفوز بالتحدي نفسه.",
+tpl_steps:"نمشي أكثر معًا",tpl_active:"١٥٠ دقيقة نشاط في الأسبوع",tpl_sleep:"موعد نوم منتظم",tpl_veg:"خمس حصص خضار وفاكهة يوميًا",
+ch_dur:"لكم من الوقت؟",ch_mode:"هدف واحد مشترك أم ترتيب ودّي؟",mode_team:"هدف واحد مشترك",mode_rank:"ترتيب ودّي",
+ch_draft:"تحدٍّ بانتظار موافقتك",ch_fair:"النتائج نسبة مئوية من الهدف اليومي الخاص بكل شخص. لا تُعرض الأرقام الفعلية إلا إذا اختار العضو مشاركة خطواته.",
+ch_sent:"أُرسل. ستعرضه إيليا الخاصة بكل شخص في وقت مناسب له.",ch_acc:"قَبِل التحدي: {who}",ch_starts:"يبدأ اليوم. سأحتسب ما توثّقه أجهزتك وأعطيك تحديثًا واحدًا كل صباح.",
+via_agent:"عبر إيليا الخاصة بـ{name}",in_chal:"{name} يدعوك أنت والدائرة إلى تحدٍّ: <b>{what}</b>.",shared_prog:"تقدّمك كنسبة مئوية",
+in_yes:"تم انضمامك. أبلغت إيليا الخاصة بـ{name}.",in_no:"لا بأس. أبلغت إيليا الخاصة بـ{name} دون ذكر سبب.",in_later:"سأسألك مجددًا غدًا.",
+ev_joined:"{name} انضم إلى «{what}»",ev_prog_team:"«{what}»، اليوم {day} من {days}: الدائرة عند {pct}% من الهدف المشترك",ev_prog_rank:"«{what}»، اليوم {day} من {days}: أنت عند {pct}% من هدفك",
+ev_done_team:"انتهى «{what}»: بلغت الدائرة {pct}%. أحسنتم جميعًا.",ev_miss_team:"انتهى «{what}» عند {pct}%. لم يتحقق الهدف هذه المرة، والأيام التي أنجزتموها محسوبة.",
+ev_done_rank:"انتهى «{what}»: متوسطك {pct}% من هدفك.",ev_miss_rank:"انتهى «{what}»: متوسطك {pct}% من هدفك. هل تريد هدفًا أخف في المرة القادمة؟",
+r_send:"مراسلة أحد الأعضاء",r_who:"لمن الرسالة؟",r_what:"ماذا أوصل إلى {name}؟ اكتب الرسالة أو اختر واحدة.",r_s1:"نمشي معًا بعد العشاء الليلة؟",r_s2:"أحسنت هذا الأسبوع. استمر!",r_s3:"أفكر فيك. كيف حالك؟",
+r_draft:"رسالة إلى {name}",r_only:"هذه الرسالة فقط",r_never:"بياناتك الصحية ودرجاتك وموقعك",r_goodtime:"عندما يكون {name} متفرغًا، وليس في ساعات الهدوء",
+r_delivered:"سُلّمت إلى إيليا الخاصة بـ{name}",r_reply1:"نعم! بعد المغرب يناسبني.",r_reply2:"شكرًا، أسعدتني.",r_reply3:"كل شيء بخير. نلتقي يوم الجمعة.",r_again:"إرسال رسالة أخرى",
+r_limit:"بلغت الحد اليومي: ٥ رسائل منقولة. هذا يمنع الدائرة من التحول إلى محادثة جماعية.",r_muted:"{name} أوقف رسائل الدائرة مؤقتًا.",
+r_abuse:"لن أنقل هذه الرسالة. الرسائل عبري يجب أن تكون لطيفة. جرّب صياغة أخرى.",r_health:"هذه الرسالة تذكر تفاصيل صحية. إذا نقلتها سيراها الطرف الآخر. هل أرسلها كما هي؟",r_health_ok:"نعم، أرسلها كما هي",r_rewrite:"إعادة الصياغة",
+co_find:"إيجاد وقت مشترك",co_who:"مع من تريد اللقاء؟",co_working:"أسأل إيليا الخاصة بـ{name} عن الأوقات التي تناسبكما…",co_found:"أوقات تناسبك وتناسب {name}",co_privacy:"قارن المساعدان أوقات الفراغ والانشغال فقط. لم تُتبادل أي تفاصيل من التقويم.",
+co_done:"تم الحجز: مشي مع {name}، {when}. سيصلكما تذكير قبل الموعد بساعة.",up_walk:"مشي مع {name}: {when}",
+sim_morning:"محاكاة: {when}، ٧:١٠ صباحًا",sim_day:"محاكاة: صباح اليوم التالي، {when}",sim_later:"محاكاة: بعد ٤٠ دقيقة",
+sg_eyebrow:"لاحظت شيئًا",sg_recovery:"{name}، لثلاث ليالٍ متتالية يبذل جسمك جهدًا أكبر من المعتاد أثناء النوم.",
+sg_rhr:"نبض الراحة مقارنة بمعدلك",sg_sleep:"النوم مقارنة بالمعتاد",sg_hrv:"تباين نبض القلب",sg_src:"المصدر: {src}. درجة الثقة: متوسطة. هذا نمط وليس تشخيصًا.",src_wear:"ساعتك المتصلة",src_sim:"بيانات ساعة محاكاة",
+sg_q:"يظهر هذا النمط غالبًا مع التوتر أو وجبة ثقيلة متأخرة أو بداية مرض. كيف تشعر اليوم؟",sg_fine:"أشعر أني بخير",sg_off:"لست على ما يرام",sg_sym:"فحص عرَض",sg_why:"لماذا تخبرني؟",
+sg_why_msg:"طلبت مني مراقبة مؤشرات التعافي. لا أتحدث إلا إذا تحركت ثلاثة مؤشرات أو أكثر معًا لعدة أيام، ومرة واحدة في اليوم على الأكثر، وليس في ساعات الهدوء. يمكنك إيقاف ذلك من الخصوصية.",
+sg_fine_msg:"جيد. مع ذلك أقترح أن يكون اليوم أخف ليستعيد جسمك نشاطه.",sg_off_msg:"شكرًا لإخباري. لنخفف الحمل اليوم، وإذا كان هناك ما يزعجك تحديدًا أستطيع فحصه معك.",
+sg_easy:"خفّف يومي",sg_easy_msg:"تم: مشي خفيف ١٠ دقائق بدل تمرين اليوم، والنوم أبكر بـ٣٠ دقيقة. سأراجع أرقام الليلة وأخبرك غدًا.",sg_keep:"أبقِ خطتي",sg_keep_msg:"مفهوم. سأواصل المراقبة ولن أعود إلا إذا استمر الأمر.",
+sg_cap:"أصدرت إيليا تنبيهًا واحدًا اليوم. تؤجل أي تنبيه آخر إلى الغد ما لم يكن عاجلًا.",sg_consent:"التنبيهات الاستباقية تحتاج تفعيل التدريب وبيانات الساعة في إعدادات الخصوصية.",
+sgt_recovery:"مؤشرات التعافي خارج المعدل",sgs_open:"بانتظار ردّك",sgs_adjusted:"خُففت الخطة",sgs_watch:"تحت المراقبة",sgs_triage:"بدأ فحص الأعراض",sgs_resolved:"عادت إلى المعدل",
+ev_signal:"عادت مؤشرات التعافي إلى معدلك",up_easy:"خُفف اليوم بعد مؤشر تعافٍ",
+med_met:"ميتفورمين",med_ator:"أتورفاستاتين",md_sched_1:"مرة يوميًا، مساءً",md_sched_2:"مرتان يوميًا، مع الفطور والعشاء",
+md_eyebrow:"تذكير بالدواء",md_when:"حان وقت جرعة الصباح، مع الفطور.",md_when_ram:"وضع رمضان: نُقل التذكير إلى الإفطار. استشر طبيبك قبل تغيير طريقة تناول أي دواء أثناء الصيام.",
+md_safe:"أنا أذكّر وأتابع. لا أغيّر الجرعات أبدًا: هذا قرار طبيبك أو الصيدلي.",md_taken:"تناولتها",md_skip:"سأتخطى هذه الجرعة",md_open:"فتح الأدوية",md_log:"تسجيل جرعة",
+md_taken_msg:"سُجّلت.",md_low:"بقي لديك نحو {n} أيام من {med}. هل أطلب إعادة الصرف من الصيدلية؟",md_refill:"طلب إعادة صرف",md_refill_msg:"أُرسل طلب إعادة صرف {med} إلى صيدليتك. ستصلك رسالة عندما يجهز للاستلام.",
+md_skip_q:"لا لوم. ما الذي منعك؟",md_r_forgot:"نسيت",md_r_side:"أعراض جانبية",md_r_out:"انتهى الدواء",md_r_fast:"أنا صائم",
+md_forgot_msg:"يحدث ذلك. سأربط التذكير بالفطور بدل ساعة محددة. إذا تذكرت خلال ساعات قليلة فراجع النشرة أو اسأل الصيدلي هل تؤخذ متأخرة.",
+md_side_msg:"من فضلك لا توقف الدواء من نفسك. الأعراض الجانبية سبب للتحدث مع مختص، وغالبًا لها حل سهل. يمكنني طلب اتصال من ممرضة.",
+md_fast_msg:"الصيام قد يغيّر وقت وطريقة تناول الأدوية، وبعض الناس يحتاجون مشورة طبية قبل الصيام. يمكنني طلب اتصال من ممرضة لوضع خطة آمنة.",
+md_adh:"من الجرعات، آخر ١٤ يومًا",md_left:"بقي نحو {n} يومًا",md_refill_sent:"طُلبت إعادة الصرف",md_low_pill:"يوشك على النفاد",ev_refill:"{med}: إعادة الصرف جاهزة للاستلام",
+md_title:"الأدوية والقراءات المنزلية",md_sub:"التذكيرات وإعادة الصرف والقراءات التي تأخذها في المنزل. إيليا تتابع وتنبّه، وفريقك الطبي يقرر.",
+md_note:"قائمة الأدوية والحدود قيم تجريبية. في التشغيل الفعلي تأتي القائمة من سجلك الصحي ويحدد المسؤول السريري للبرنامج الحدود.",
+rd_ask:"أرسل لي قراءة، مثل «BP 128/82» أو «سكر 6.4». أو اختر مثالًا.",rd_g1:"سكر 6.1",rd_g2:"سكر 14.8",rd_bad:"لم أستطع قراءة ذلك. جرّب «BP 128/82» أو «سكر 6.4».",rd_recheck:"تسجيل قراءة أخرى",
+rd_bp_ok:"سُجّلت {v}. ضمن النطاق المستهدف.",rd_bp_high:"سُجّلت {v}. أعلى من المستهدف. قراءة مرتفعة واحدة لا تدعو للقلق. اجلس بهدوء خمس دقائق وقِس مجددًا، ثم غدًا صباحًا.",
+rd_bp_trend:"سُجّلت {v}. هذه القراءة المرتفعة رقم {n} هذا الأسبوع، وحان الوقت ليراجعها طبيبك. يمكنني حجز موعد.",
+rd_bp_crisis:"{v} قراءة مرتفعة جدًا. اجلس واسترح خمس دقائق وقِس مجددًا. إذا كان لديك أيضًا ألم في الصدر أو ضيق في التنفس أو صداع شديد أو ضعف أو تشوش أو تغيّر في الرؤية فاتصل بـ 9999 الآن.",
+rd_glu_ok:"سُجّلت {v} مليمول/ل. ضمن النطاق.",rd_glu_above:"سُجّلت {v} مليمول/ل. أعلى قليلًا من المستهدف، وهذا شائع بعد الوجبات. سأتابع الاتجاه.",
+rd_glu_high:"{v} مليمول/ل قراءة مرتفعة. اشرب ماءً وتجنب السكريات وقِس مجددًا بعد ساعتين. إذا بقيت مرتفعة أو شعرت بتوعك فيجب أن يعرف فريقك الطبي اليوم.",
+rd_glu_vhigh:"{v} مليمول/ل قراءة مرتفعة جدًا. إذا شعرت بغثيان أو تقيؤ أو عطش شديد أو نعاس أو تنفس سريع فاتصل بـ 9999 أو توجه إلى الطوارئ الآن. وإلا فقِس مجددًا بعد ساعة ودعني أُشرك ممرضة.",
+rd_glu_low:"{v} مليمول/ل قراءة منخفضة. تناول ١٥ غرامًا من سكر سريع الآن (نصف كوب عصير أو ٣ تمرات)، انتظر ١٥ دقيقة وقِس مجددًا.",
+rd_glu_vlow:"{v} مليمول/ل قراءة منخفضة جدًا. تناول سكرًا سريعًا الآن ولا تبقَ وحدك. إذا شعرت بتشوش أو إغماء أو لم ترتفع خلال ١٥ دقيقة فاتصل بـ 9999.",
+rd_bp:"ضغط الدم",rd_glu:"سكر الدم",rd_add:"إضافة",rd_bp_note:"الخط المتقطع: ١٤٠ ملم زئبق انقباضي.",rd_glu_note:"الخط المتقطع: ١٠ مليمول/ل.",rd_p_ok:"ضمن النطاق",rd_p_high:"أعلى من المستهدف",rd_p_urgent:"يحتاج انتباهًا",
+esc_title:"التصعيدات",esc_none:"لم يحتج أي أمر إلى تصعيد.",esc_ladder:"سلّم إيليا: نصيحة رعاية ذاتية، فترة مراقبة، اتصال ممرضة، موعد طبيب، خدمات الطوارئ. كل خطوة تُسجَّل وتراها هنا.",
+esc_l1:"نصيحة رعاية ذاتية",esc_l2:"مراقبة",esc_l3:"الفريق الطبي",esc_l4:"عاجل",esc_l5:"طوارئ",esc_logged:"مسجّل",esc_urgent:"عاجل",esc_act:"تصرّف الآن",
+esc_k_bp_crisis:"قراءة ضغط مرتفعة جدًا",esc_k_bp_trend:"ارتفاع متكرر في الضغط",esc_k_glu_low:"قراءة سكر منخفضة",esc_k_glu_high:"قراءة سكر مرتفعة",esc_k_callback:"طلب اتصال من ممرضة",
+esc_nurse:"اطلب من ممرضة الاتصال بي",esc_share_q:"هل أشارك قراءات آخر ١٤ يومًا وسجل الأدوية مع الممرضة حتى لا تضطر لتكرارها؟",esc_share_yes:"نعم، شاركها",esc_share_no:"لا، الاتصال فقط",
+esc_cb_msg:"طُلب الاتصال. ستتصل بك ممرضة البرنامج خلال ساعتين، بين ٨ صباحًا و٨ مساءً.",esc_cb_shared:"شُورك لهذا الاتصال فقط: قراءات ١٤ يومًا وسجل الأدوية. سُجّل ذلك في سجل الوصول.",esc_cb_notshared:"لم يُشارَك شيء. ستسألك الممرضة مباشرة.",
+ph_nurse:"نموذج · خط التمريض",ph_pharm:"نموذج · الصيدلية",ph_sched:"نموذج · المواعيد",ph_sponsor:"نموذج · كتالوج الراعي",
+gp_due:"مستحق قريبًا",gp_overdue:"متأخر",gp_basis:"استنادًا إلى",gp_reward:"الحضور يمنحك ٥٠ نقطة بعد تأكيد العيادة.",gp_book:"احجز",gp_done:"أجريته بالفعل",gp_later:"ذكّرني لاحقًا",gp_all:"عرض كل الفحوصات",
+gp_none:"أنت مواكب لكل الفحوصات التي أتابعها.",gp_later_msg:"سأذكّرك به بعد أسبوعين.",gp_slots:"هذه أقرب المواعيد في عيادتك.",gp_booked_note:"أُضيف إلى سجل رعايتك. تُضاف النقاط بعد أن تؤكد العيادة حضورك.",
+gp_done_q:"جيد. متى تقريبًا؟",gp_w1:"هذا الشهر",gp_w2:"خلال آخر ٣ أشهر",gp_w3:"قبل ذلك",gp_done_msg:"سُجّل كمُنجَز بناءً على إفادتك. ارفع النتيجة في ملفاتي وسأعلّمه كموثّق.",gp_old_msg:"إذن حان موعده من جديد.",
+gp_st_done:"مُنجَز",gp_st_booked:"محجوز",gp_st_ok:"مواكب",gp_st_snoozed:"مؤجل",up_booked:"حُجز: {what}",ev_gap:"أكدت العيادة زيارتك: {what}",
+gap_a1c:"تحليل السكر التراكمي",gap_a1c_why:"يبيّن متوسط سكر الدم خلال ثلاثة أشهر، ويخبرنا هل الخطة تنجح.",gap_a1c_src:"معايير الرعاية ADA: مرة سنويًا على الأقل مع مقدمات السكري، ومرتان مع السكري",
+gap_eye:"فحص العين لمرضى السكري",gap_eye_why:"قد يضر السكري بالشبكية قبل تغيّر النظر بوقت طويل. الفحص يكشفه مبكرًا.",gap_eye_src:"معايير الرعاية ADA: كل سنة إلى سنتين",
+gap_kidney:"فحص الكلى (بول ودم)",gap_kidney_why:"تحليل ألبومين البول ووظائف الكلى يكشف الإجهاد المبكر حين يكون قابلًا للعلاج.",gap_kidney_src:"معايير الرعاية ADA: سنويًا مع السكري من النوع الثاني",
+gap_lipid:"تحليل الدهون",gap_lipid_why:"الكوليسترول وسكر الدم يرفعان خطر القلب معًا. يحدد التحليل هل يحتاج العلاج تعديلًا.",gap_lipid_src:"إرشادات ADA و ACC/AHA: سنويًا أثناء العلاج",
+gap_flu:"لقاح الإنفلونزا الموسمية",gap_flu_why:"الإنفلونزا أشد على من لديهم ارتفاع في السكر. حقنة واحدة تغطي الموسم.",gap_flu_src:"توصيات منظمة الصحة العالمية للبالغين ذوي الأمراض المزمنة",
+gap_crc:"فحص سرطان القولون والمستقيم",gap_crc_why:"تحليل براز بسيط في المنزل هو الخطوة الأولى المعتادة من سن ٤٥.",gap_crc_src:"USPSTF: البالغون من ٤٥ إلى ٧٥",
+gap_bpc:"قياس ضغط الدم",gap_bpc_why:"تغطيه القراءات التي تأخذها في المنزل.",gap_bpc_src:"USPSTF: سنويًا من سن ٤٠",gap_bpv:"مراجعة ضغط الدم مع طبيبك",
+pv_title:"الوقاية",pv_sub:"الفحوصات واللقاحات المستحقة لمن في عمرك وتاريخك الصحي.",pv_open:"مستحق الآن",pv_booked:"محجوز",pv_done:"مواكب",
+pv_note:"الفحوصات الظاهرة وتكرارها قواعد تجريبية مبنية على إرشادات منشورة. المسؤول السريري للبرنامج هو صاحب الجدول. إيليا تذكّر وتحجز ولا تطلب التحاليل.",
+wk_eyebrow:"أسبوعك",wk_steps:"متوسط الخطوات يوميًا",wk_days:"أيام بلغت فيها هدف {t} خطوة",wk_meds:"الأدوية المأخوذة",wk_pts:"النقاط المكتسبة",wk_up:"أكثر بـ{d} خطوة يوميًا من الأسبوع السابق.",wk_down:"أقل بـ{d} خطوة يوميًا من الأسبوع السابق.",
+wk_nostreak:"الأيام الفائتة لا تعيد أي شيء إلى الصفر. لا توجد سلاسل هنا.",wk_q_hard:"بلغت هدفك معظم الأيام. مستعد لهدف أكبر قليلًا؟",wk_q_easy:"كان الهدف صعبًا هذا الأسبوع. هدف أصغر تبلغه أفضل من هدف أكبر يفوتك.",wk_q_keep:"أسبوع جيد. نُبقي الهدف أم نغيّره؟",
+wk_keep:"أبقِه",wk_easier:"اجعله أسهل",wk_harder:"اجعله أصعب",wk_keep_msg:"الهدف نفسه الأسبوع القادم.",wk_set:"هدفك اليومي الجديد {t} خطوة.",up_target:"عُدّل هدف الخطوات اليومي إلى {t}",
+mu_eyebrow:"تحديث الصباح",mu_steps:"أمس: {n} خطوة",mu_hit:"بلغت هدفك: {t} خطوة.",mu_miss:"هدفك {t} خطوة. يوم أمس محسوب ضمن أسبوعك.",
+rw_title:"المكافآت",rw_sub:"نقاط مقابل أفعال يمكن التحقق منها. الأفعال الموثّقة تكسب أكثر من الإفادات الشخصية.",rw_balance:"رصيدك",rw_cap:"{n} من {cap} نقطة يومية اليوم. الفحوصات والتحديات خارج الحد.",rw_nostreak:"لا سلاسل ولا عقوبات. النقاط لا تنتهي خلال سنة البرنامج.",
+rw_how:"كيف تُكتسب النقاط",rw_how_note:"يحدد الراعي قيم النقاط وقد تختلف حسب البرنامج.",rw_catalog:"الاستبدال",rw_redeem:"استبدال",rw_mine:"قسائمك",rw_ledger:"سجل النقاط",rw_redeemed:"استُبدل",rw_bal:"لديك {n} نقطة.",
+col_date:"التاريخ",col_what:"الفعل",col_proof:"الإثبات",
+p_steps:"بلوغ هدف الخطوات اليومي",p_meal:"تسجيل وجبة متوازنة",p_med:"تسجيل جرعة دواء",p_welcome:"مكافأة الترحيب",p_chal:"إكمال تحدٍّ",p_reading:"تسجيل قراءة منزلية",p_gap:"حضور فحص",p_gap_self:"الإفادة بإجراء فحص",
+rwd_pharm:"قسيمة صيدلية، ٥ ر.ع.",rwd_pharm_d:"لدى الصيدليات الشريكة. لا تصلح لمنتجات التبغ.",rwd_grocery:"قسيمة بقالة صحية، ٨ ر.ع.",rwd_grocery_d:"خضار وفاكهة وسمك وحبوب كاملة لدى المتاجر الشريكة.",
+rwd_gym:"تذكرة يوم لنادٍ أو مسبح",rwd_gym_d:"زيارة واحدة لمركز لياقة شريك.",rwd_charity:"تبرع للجمعية العمانية للسكري",rwd_charity_d:"يتبرع الراعي بـ٣ ر.ع. باسمك.",rwd_visit:"إعفاء من رسوم زيارة",rwd_visit_d:"زيارة متابعة واحدة في عيادة البرنامج دون رسوم.",
+ci_title:"دائرتي",ci_sub:"أشخاص اخترتهم، وأهداف مشتركة، ورسائل ينقلها مساعدوكم.",ci_empty:"ليست لديك دائرة بعد. ابدأ واحدة مع العائلة أو الأصدقاء.",ci_start:"بدء دائرة",ci_members:"{n} أعضاء",ci_owner:"صاحب الدائرة",
+ci_joined:"منضم",ci_invited:"مدعو، بانتظار الرد",ci_removed:"أُزيل",ci_blocked:"محظور",ci_muted:"مكتوم",ci_mute:"كتم",ci_unmute:"إلغاء الكتم",ci_remove:"إزالة",ci_block:"حظر",ci_unblock:"إلغاء الحظر",ci_leave:"مغادرة الدائرة",
+ci_share_steps:"مشاركة عدد خطواتي اليومي مع هذه الدائرة",ci_share_note:"عند الإيقاف: يرى الأعضاء تقدّمك في التحدي كنسبة مئوية فقط.",ci_safe:"للبالغين فقط. السجلات الصحية والدرجات والأدوية والموقع لا تُشارَك مع الدائرة أبدًا.",
+ci_day:"اليوم {d} من {n}",ci_team_goal:"من الهدف المشترك",ci_days_in:"{n} أيام هدف",ci_team_note:"الهدف المشترك بلا ترتيب. أيام الهدف للجميع متساوية القيمة.",ci_rank_note:"الترتيب حسب نسبة كل شخص من هدفه الخاص، لا حسب الأرقام الفعلية.",ci_quit:"مغادرة التحدي",
+ci_plans:"خطط مشتركة",ci_walk:"مشي مع {name}",ci_agents:"رتّبه مساعداكما",ci_relay:"الرسائل المنقولة",ci_to:"إلى {name}",ci_from:"من {name}",ci_report:"إبلاغ",ci_reported:"تم الإبلاغ",ci_relay_note:"حتى ٥ رسائل منقولة يوميًا. البلاغات يراجعها إنسان ولا يُخبَر المرسل بمن أبلغ.",
+pop_title:"التحديات الوطنية والمجتمعية",pop_sub:"تنظمها وزارة الصحة ورعاة البرنامج. الترتيب للمجموعات لا للأفراد.",pop_from:"وزارة الصحة · تحدٍّ وطني",pop_invite:"أنت مدعو للمشي مع محافظتك. خطواتك تُضاف إلى مجموع فريقك. ضغطة للانضمام وضغطة للمغادرة.",
+pop_shared:"مجموع خطواتك الموثّقة، مضافًا إلى مجموع فريقك",pop_never:"اسمك وأرقامك الفردية وأي بيانات صحية",pop_join:"الانضمام إلى فريق محافظتي",pop_stop:"إيقاف هذه الدعوات",pop_joined:"أنت في فريق {team}. تُحتسب خطواتك الموثّقة من اليوم.",pop_declined:"لا بأس. لن أسألك مجددًا عن هذا التحدي.",pop_stopped:"تم. أوقفت دعوات البرنامج من الخصوصية. يمكنك إعادة تفعيلها من هناك.",
+pop_blocked:"لم تُسلَّم دعوة تحدٍّ وطني: رسائل البرنامج متوقفة في إعدادات خصوصية هذا العضو.",pop_none:"لا توجد دعوات مفتوحة الآن.",pop_board:"عرض الترتيب",pop_view:"عرض الدعوة",pop_leave:"مغادرة",pop_mine:"مساهمتك: {n} خطوة",pop_yours:"فريقك",pop_part:"{n} مشاركًا",
+pop_note:"يعتمد الترتيب على متوسط نسبة الهدف الشخصي لكل مشارك، فلا أفضلية للمحافظات الكبيرة. المجموعات المخفية لصغر حجمها: {n}.",
+pr_title:"الخصوصية والموافقات",pr_sub:"أنت تقرر ما تستخدمه إيليا ومن يراه. كل تغيير يسري فورًا ويُكتب في سجلك.",pr_consents:"ما تسمح به",
+cs_coach:"التدريب الشخصي",cs_coach_d:"تستخدم إيليا إجاباتك ووجباتك وخطتك لتدريبك. لازم للخدمة.",cs_wear:"بيانات الساعة والمسح",cs_wear_d:"تُستخدم لخطتك والتنبيهات الاستباقية والنقاط الموثّقة.",cs_records:"السجلات الصحية",cs_records_d:"تسمح لإيليا بقراءة السجلات التي ربطتها لإيجاد الفحوصات المستحقة والإجابة عن الأسئلة.",
+cs_circle:"دوائر العافية",cs_circle_d:"تسمح لك بالانضمام إلى الدوائر. يرى الأعضاء التقدّم في التحديات فقط.",cs_sponsor:"تقارير البرنامج ودعواته",cs_sponsor_d:"تُحتسب بياناتك ضمن إحصاءات المجموعات للوزارة والراعي ولا تُعرض فرديًا. وتسمح أيضًا بدعوات التحديات الوطنية.",cs_research:"الاستخدام البحثي",cs_research_d:"قد تُستخدم بيانات منزوعة الهوية في أبحاث معتمدة. متوقف افتراضيًا.",
+pr_regional:"الإعدادات الإقليمية",pr_ramadan:"وضع رمضان",pr_ramadan_d:"ينقل التذكيرات إلى السحور والإفطار، ويؤخر النشاط إلى ما بعد الإفطار، ويسأل قبل أي أمر دوائي متعلق بالصيام.",pr_quiet:"ساعات الهدوء وأوقات الصلاة",pr_quiet_d:"لا رسائل من ١٠ مساءً إلى ٧ صباحًا ولا في أوقات الصلاة، عدا رسائل السلامة العاجلة.",pr_hijri:"التاريخ الهجري",
+pr_rights:"بياناتك",pr_export:"تنزيل بياناتي",pr_delete:"طلب الحذف",pr_delete_sent:"طُلب الحذف",pr_delete_note:"سُجّل طلبك. يكتمل الحذف خلال ٣٠ يومًا ويُؤكَّد كتابيًا.",
+pr_ai:"إيليا مساعد يعمل بالذكاء الاصطناعي. تقدم إرشادًا للعافية لا تشخيصًا، ويراجع مختص سريري قواعدها.",pr_law:"تُعالج وفق قانون حماية البيانات الشخصية في سلطنة عُمان (المرسوم السلطاني ٦/٢٠٢٢). البيانات الصحية تحتاج موافقتك الصريحة، ويمكنك سحبها من هنا.",
+pr_audit:"سجل الوصول والنشاط",pr_audit_note:"يبيّن من أو ما الذي استخدم بياناتك، وكل قرار مشاركة اتخذته.",
+a_consent:"سُجّلت الموافقات عند التسجيل",a_consent_set:"تغيّرت الموافقة: {what} الآن {state}",a_circle:"أُنشئت دائرة وأُرسلت {n} دعوات",a_chal:"أُرسل تحدٍّ: {name}",a_relay:"نُقلت رسالة إلى إيليا الخاصة بـ{name}",a_coord:"قورنت أوقات الفراغ مع إيليا الخاصة بـ{name}",a_esc:"سُجّل تصعيد (المستوى {level})",
+a_share_nurse:"شُوركت قراءات ١٤ يومًا مع خط التمريض لاتصال واحد",a_callback:"طُلب اتصال ممرضة دون مشاركة شيء",a_refill:"طُلبت إعادة صرف: {med}",a_book:"حُجز موعد",a_pop:"انضمام إلى تحدٍّ وطني: {name}",a_remove:"أُزيل {name} من الدائرة",a_block:"حُظر {name}",a_unblock:"أُلغي حظر {name}",
+a_share:"مشاركة الدائرة أصبحت: {what}",a_leave:"غادرت دائرة",a_quit:"غادرت تحديًا",a_report:"أُبلغ عن رسالة من {name}",a_redeem:"استُبدلت مكافأة: {what}",a_delete:"طُلب الحذف",a_export:"نُزّلت نسخة من البيانات",a_min_view:"فتح محلل البرنامج لوحة الإحصاءات المجمّعة (دون بيانات فردية)",a_min_export:"صدّر محلل البرنامج ملف CSV مجمّعًا",a_min_pop:"أُنشئ تحدٍّ وطني: {name}",
+ov_signals:"ما لاحظته إيليا",ov_sim_signal:"محاكاة تنبيه",ov_nosig:"لا شيء غير معتاد في مؤشراتك.",ov_sig_note:"تتحدث إيليا مرة واحدة يوميًا على الأكثر، وفقط عندما تتحرك عدة مؤشرات معًا.",ov_next:"القادم",ov_pts_note:"رصيد المكافآت",ov_circle_note:"ابدأ دائرة مع من تثق بهم",
+min_tag:"بيانات مجمّعة فقط",min_role:"الدخول بصفة: محلل برنامج، وزارة الصحة (دور تجريبي)",min_title:"البرنامج الوطني للوقاية",min_sub:"نتائج على مستوى المجموعات لبرنامج إيليا. كل الأرقام في هذه الصفحة بيانات تجريبية مصطنعة.",min_csv:"تصدير CSV",min_close:"العودة إلى عرض العضو",
+min_f_prog:"البرنامج",min_f_age:"العمر",min_asof:"حتى {when}",min_prog_all:"كل البرامج",min_prog_dpp:"الوقاية من السكري",min_prog_htn:"ضغط الدم",min_prog_weight:"الوزن الصحي",min_age_all:"كل الأعمار",min_age_a1:"١٨ إلى ٣٤",min_age_a2:"٣٥ إلى ٤٩",min_age_a3:"٥٠ إلى ٦٤",min_age_a4:"٦٥ فأكثر",
+min_k_enrolled:"الأعضاء المسجلون",min_k_active:"النشطون هذا الأسبوع",min_pp:"نقاط في ٤ أسابيع",min_k_verified:"أفعال موثّقة هذا الأسبوع",min_k_gaps:"فحوصات مستحقة أُنجزت منذ بداية السنة",min_k_high:"أعضاء في خطر مرتفع",min_k_cost:"تكلفة متجنَّبة مُقدَّرة، ر.ع. (تقدير لا قياس)",
+min_by_gov:"حسب المحافظة",min_metric_active:"النشطون أسبوعيًا، %",min_metric_gaps:"الفحوصات المنجزة، %",min_metric_steps:"متوسط الخطوات اليومية",min_metric_ver:"أفعال موثّقة لكل عضو أسبوعيًا",min_metric_esc:"تصعيدات لكل ١٠٠٠ عضو",
+min_metric_note_active:"نسبة الأعضاء الذين لديهم فعل موثّق أو محادثة واحدة على الأقل خلال آخر ٧ أيام.",min_metric_note_gaps:"نسبة الفحوصات المستحقة التي حُضرت وأكدتها عيادة.",min_metric_note_steps:"من الأعضاء الذين يشاركون خطوات الساعة أو الهاتف.",min_metric_note_ver:"أفعال أكدها جهاز أو صورة أو عيادة.",min_metric_note_esc:"حالات أحالتها إيليا إلى ممرضة أو طبيب أو الطوارئ.",
+min_sup:"مخفي: أقل من {n} عضوًا",min_risk:"توزيع الخطر",min_r_low:"منخفض",min_r_rising:"متصاعد",min_r_high:"مرتفع",min_risk_note:"فئة الخطر حسب قاعدة التصنيف في البرنامج. أعداد فقط.",min_trend:"النشطون أسبوعيًا، آخر ١٢ أسبوعًا",min_trend_note:"نسبة من الأعضاء المسجلين.",
+min_equity:"من يشارك",min_e_w:"النساء",min_e_m:"الرجال",min_equity_note:"الحصة من الأعضاء النشطين. تساعد على اكتشاف الفئات التي لا يصلها البرنامج.",
+min_pop:"التحديات الوطنية",min_c_name:"التحدي",min_c_metric:"الهدف",min_c_days:"الأيام",min_c_inv:"المدعوون",min_c_join:"المنضمون",min_c_lead:"الفريق المتصدر",min_c_reward:"نقاط الإكمال",min_ph_name:"مثال: نمشي إلى العيد الوطني",min_create:"إنشاء ودعوة",
+min_pop_note:"تُرسل الدعوات فقط إلى الأعضاء الذين يسمحون برسائل البرنامج. الفرق هي المحافظات، والترتيب بمتوسط نسبة الهدف الشخصي حتى لا يحسم عدد السكان النتيجة.",
+min_protect:"كيف يُحمى الأعضاء: هذا العرض يحوي أعدادًا ومتوسطات فقط. أي مجموعة أقل من {n} عضوًا تُخفى. لا يمكن فتح بيانات فرد من هنا، والملفات المصدَّرة تحوي المجاميع نفسها، وكل وصول يُكتب في سجل تدقيق يراه الأعضاء.",
+};
+for(const[k,v]of Object.entries(X_AR))L.ar["x_"+k]=v;
+
+/* ===== ELIA v3 prototype module =====
+   Adds the requirement areas from the consolidated requirements (v3.1) on top of the first demo:
+   proactive detection, verified actions, incentives, behaviour loop, preventive care gaps, medication and
+   home monitoring, escalation, privacy and consent, wellness circles, challenges, agent-relayed messages,
+   leaderboards, population challenges and the ministry view. Everything here runs on simulated data. */
+const T=(k,v)=>t("x_"+k,v);
+const V3C=[
+  {id:"fatma",n:{en:"Fatma",ar:"فاطمة"},rel:"spouse",base:5400},
+  {id:"salim",n:{en:"Salim",ar:"سالم"},rel:"brother",base:7800},
+  {id:"maryam",n:{en:"Maryam",ar:"مريم"},rel:"sister",base:4600},
+  {id:"khalid",n:{en:"Khalid",ar:"خالد"},rel:"friend",base:9100},
+  {id:"yusuf",n:{en:"Yusuf",ar:"يوسف"},rel:"colleague",base:6900}];
+const cm=id=>V3C.find(c=>c.id===id);
+const nm=c=>c?(c.n[S.lang]||c.n.en):"";
+const V3T={steps:{ver:"wear"},active:{ver:"wear"},sleep:{ver:"wear"},veg:{ver:"photo"}};
+const V3R=[{id:"pharm",cost:200},{id:"grocery",cost:300},{id:"gym",cost:150},{id:"charity",cost:100},{id:"visit",cost:400}];
+const V3CAP=60;
+function vRng(seed){let h=2166136261;for(const c of String(seed)){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return()=>{h^=h<<13;h^=h>>>17;h^=h<<5;return((h>>>0)%100000)/100000}}
+function vDate(off=0){return new Date(Date.now()+(V().day+off)*864e5)}
+function vFmt(d,o){return d.toLocaleDateString(LOCALE[S.lang],o||{weekday:"short",day:"numeric",month:"short"})}
+function vDay(i){return vFmt(new Date(Date.now()+i*864e5),{day:"numeric",month:"short"})}
+function vNum(n){return Math.round(n).toLocaleString(LOCALE[S.lang])}
+function vAge(){const f=S.facts&&S.facts.age;const a=f?parseInt(fv(f),10):NaN;return a>0?a:47}
+function vDiab(){const r=S.record;const c=r&&JSON.stringify(r.conditions||r.problems||"");return c&&/diabet/i.test(c)?"t2d":"pre"}
+function vWear(){return Object.keys(S.wear||{}).length>0}
+function V(){if(!S.v3)S.v3=v3Fresh();return S.v3}
+function v3Fresh(){
+  const w=typeof wearInputs==="function"?wearInputs():{};const base=Math.round((w.steps||6200)/100)*100;
+  const v={day:0,base,target:Math.round(base*1.1/100)*100,steps:[],pts:{bal:0,ledger:[]},redeemed:[],signals:[],gaps:[],meds:[],bp:[],glu:[],esc:[],circles:[],chal:[],relay:[],plans:[],pop:[],
+    consent:{coach:true,wear:true,records:true,circle:true,sponsor:true,research:false},audit:[],ramadan:false,quiet:true,proDay:-9,await:null,ret:null,draft:null,relayDay:{d:0,n:0},gov:"muscat",del:false};
+  const r=vRng("me|"+base);
+  for(let i=-13;i<=-1;i++)v.steps.push({d:i,n:Math.round(base*(0.72+r()*0.55))});
+  for(let i=-9;i<=-1;i+=2){v.bp.push({d:i,sys:Math.round(128+r()*14),dia:Math.round(80+r()*9)});v.glu.push({d:i,v:Math.round((5.9+r()*1.5)*10)/10})}
+  v.meds=[{id:"met",dose:"500 mg",times:2,left:6,log:{}},{id:"ator",dose:"20 mg",times:1,left:19,log:{}}];
+  v.meds.forEach(m=>{for(let i=-13;i<=-1;i++)m.log[i]=Array.from({length:m.times},()=>r()>0.16)});
+  const age=vAge(),dz=vDiab();
+  v.gaps=[{id:"a1c",status:"due",due:-20},{id:"eye",status:dz==="t2d"?"due":"na",due:14},{id:"kidney",status:dz==="t2d"?"due":"na",due:30},{id:"lipid",status:"due",due:-5},{id:"flu",status:"due",due:10},
+    {id:"crc",status:age>=45?"due":"na",due:60},{id:"bpc",status:"ok",due:300}].filter(g=>g.status!=="na");
+  v.pts.ledger=[{d:-6,k:"p_steps",pts:10,ver:"wear"},{d:-4,k:"p_meal",pts:8,ver:"photo"},{d:-3,k:"p_steps",pts:10,ver:"wear"},{d:-2,k:"p_med",pts:2,ver:"self"},{d:-1,k:"p_welcome",pts:100,ver:"prog"}];
+  v.pts.bal=v.pts.ledger.reduce((a,x)=>a+x.pts,0);
+  v.pop=[{id:"omanwalks",name:{en:"Oman Walks: one billion steps in 30 days",ar:"عُمان تمشي: مليار خطوة في ٣٠ يومًا"},by:"moh",metric:"steps",days:30,state:"invited",start:0,pts:150,mine:0}];
+  v.audit=[{d:-1,k:"a_consent"}];
+  return v}
+function v3Audit(k,vars){V().audit.unshift({d:V().day,k,v:vars||{}});V().audit=V().audit.slice(0,40)}
+function v3Pts(k,pts,ver){const v=V();let got=pts;
+  if(pts>0&&ver!=="clinic"&&ver!=="prog"){const today=v.pts.ledger.filter(x=>x.d===v.day&&x.pts>0&&x.ver!=="clinic"&&x.ver!=="prog").reduce((a,x)=>a+x.pts,0);got=Math.max(0,Math.min(pts,V3CAP-today))}
+  if(!got)return 0;v.pts.ledger.unshift({d:v.day,k,pts:got,ver});v.pts.bal+=got;return got}
+const vVer=ver=>`<span class="x-ver ${ver==="self"?"s":"v"}">${T("ver_"+ver)}</span>`;
+const vPts=n=>`<span class="x-pts${n<0?" neg":""}">${n>0?"+":""}${n} ${T("pts")}</span>`;
+/* Entering a v3 flow from the middle of another one: remember the open question so it can be restored afterwards */
+function v3Enter(){const v=V();setView("chat");if(!v.ret){v.ret={r:S.curReplies,a:S.await};S.await=null}v.await=null}
+function v3End(){const v=V(),r=v.ret;v.ret=null;v.await=null;if(typeof renderHQ==="function")renderHQ();
+  if(S.sim)return;if(S.coreDone){coreReplies();return}
+  if(r&&(r.a||r.r)){S.await=r.a;if(r.r)replies(r.r);return}
+  replies([[T("m_more"),v3Menu,{silent:true}]])}
+function v3Leave(){const v=V();if(v.ret){S.await=v.ret.a}v.ret=null;v.await=null}
+function v3Go(tab){S.hqTab=tab;setView("hq");renderHQ();if(V().ret)v3End()}
+function v3Menu(){v3Enter();bot(T("menu"));replies([[T("m_circle"),v3CircleHome],[T("m_gaps"),v3GapsChat],[T("m_meds"),v3MedsChat],[T("m_reading"),v3AskReading],[T("m_week"),v3Week],[T("m_rewards"),()=>v3Go("rewards"),{silent:true}],[T("m_back"),v3End,{silent:true}]])}
+
+/* ---------- Circles ---------- */
+const vJoined=c=>c.members.filter(m=>m.state==="joined");
+function v3AutoCircle(){const v=V();const c={id:"c"+Date.now(),kind:"family",share:"prog",members:[{id:"fatma",state:"joined"},{id:"salim",state:"joined"},{id:"maryam",state:"joined"}],made:v.day};v.circles.unshift(c);v3Audit("a_circle",{n:3});sys(T("c_auto"));return c}
+function v3CircleHome(){v3Enter();const v=V();
+  if(!v.consent.circle){bot(T("c_off"));replies([[T("open_privacy"),()=>v3Go("privacy"),{silent:true}],[T("m_back"),v3End,{silent:true}]]);return}
+  if(!v.circles.length){bot(T("c_intro"));replies([[T("c_family"),()=>v3CirclePick("family")],[T("c_friends"),()=>v3CirclePick("friends")],[T("c_work"),()=>v3CirclePick("work")],[T("notnow"),v3End]]);return}
+  const c=v.circles[0];bot(T("c_home",{name:T("c_"+c.kind),n:vJoined(c).length}));
+  replies([[T("ch_new"),()=>v3ChalNew(c)],[T("r_send"),()=>v3RelayPick(c)],[T("co_find"),()=>v3CoordPick(c)],[T("c_board"),()=>v3Go("circle"),{silent:true}],[T("m_back"),v3End,{silent:true}]])}
+function v3CirclePick(kind){const v=V();v.draft={kind,pick:[]};const d=v.draft;bot(T("c_who"));
+  const show=()=>setReplies([...V3C.map(m=>[`${nm(m)} · ${T("rel_"+m.rel)}`,()=>{const i=d.pick.indexOf(m.id);if(i<0){if(d.pick.length<12)d.pick.push(m.id)}else d.pick.splice(i,1);show()},{keep:true,on:d.pick.includes(m.id)}]),
+    [T("c_invite_go"),()=>{if(!d.pick.length){bot(T("c_pick_one"));later(show);return}v3CircleShare()},{cls:"go"}]]);
+  later(show)}
+function v3CircleShare(){bot(T("c_share_q"));replies([[T("c_share_prog"),()=>v3CircleCreate("prog")],[T("c_share_steps"),()=>v3CircleCreate("steps")]])}
+function v3CircleCreate(share){const v=V(),d=v.draft;const c={id:"c"+Date.now(),kind:d.kind,share,members:d.pick.map(id=>({id,state:"invited"})),made:v.day};v.circles.unshift(c);v.draft=null;v3Audit("a_circle",{n:c.members.length});
+  bot(T("c_sent",{n:c.members.length}));
+  c.members.forEach((m,i)=>{if(i<Math.max(1,c.members.length-1))m.state="joined"});
+  sys(T("c_joined",{who:vJoined(c).map(m=>nm(cm(m.id))).join(", ")}));
+  bot(T("c_next"));renderHQ();replies([[T("ch_new"),()=>v3ChalNew(c)],[T("later_btn"),v3End]])}
+
+/* ---------- Challenges ---------- */
+function v3ChalNew(c){v3Enter();if(!vJoined(c).length){bot(T("ch_nobody"));v3End();return}bot(T("ch_pick"));replies(Object.keys(V3T).map(k=>[T("tpl_"+k),()=>v3ChalDur(c,k)]))}
+function v3ChalDur(c,k){bot(T("ch_dur"));replies([[T("d7"),()=>v3ChalMode(c,k,7)],[T("d14"),()=>v3ChalMode(c,k,14)]])}
+function v3ChalMode(c,k,days){bot(T("ch_mode"));replies([[T("mode_team"),()=>v3ChalDraft(c,k,days,"team")],[T("mode_rank"),()=>v3ChalDraft(c,k,days,"rank")]])}
+function v3ChalDraft(c,k,days,mode){const who=vJoined(c).map(m=>nm(cm(m.id))).join(", ");
+  bot(`<div class="x-card"><span class="x-eyebrow">${T("ch_draft")}</span><b>${T("tpl_"+k)}</b><div class="x-kv"><span>${T("k_with")}</span><span>${esc(who)}</span><span>${T("k_len")}</span><span>${T("d"+days)}</span><span>${T("k_mode")}</span><span>${T("mode_"+mode)}</span><span>${T("k_proof")}</span><span>${T("ver_"+V3T[k].ver)}</span></div><p class="x-note">${T("ch_fair")}</p></div>`);
+  replies([[T("approve_send"),()=>v3ChalSend(c,k,days,mode),{cls:"go"}],[T("change"),()=>v3ChalNew(c)],[T("cancel"),v3End]])}
+function v3ChalSend(c,k,days,mode){const v=V(),ids=vJoined(c).map(m=>m.id);
+  const ch={id:"h"+Date.now(),circle:c.id,tpl:k,days,mode,start:v.day,state:"active",by:"me",who:["me",...ids],acc:{},data:{me:[]}};
+  ids.forEach((id,i)=>{ch.acc[id]=(i===ids.length-1&&ids.length>1)?"wait":"yes";if(ch.acc[id]==="yes")ch.data[id]=[]});v.chal.unshift(ch);v3Audit("a_chal",{name:T("tpl_"+k)});
+  bot(T("ch_sent"));sys(T("ch_acc",{who:ids.filter(id=>ch.acc[id]==="yes").map(id=>nm(cm(id))).join(", ")}));
+  bot(T("ch_starts"));replies([[T("next_day"),()=>v3NextDay(1),{silent:true}],[T("c_board"),()=>v3Go("circle"),{silent:true}],[T("m_back"),v3End,{silent:true}]])}
+function v3Incoming(){v3Enter();const v=V();const c=v.circles[0]||v3AutoCircle();const from=vJoined(c)[Math.min(1,vJoined(c).length-1)];if(!from){v3End();return}const name=nm(cm(from.id));
+  const used=v.chal.map(h=>h.tpl),k=["active","sleep","veg","steps"].find(x=>!used.includes(x))||"active";
+  bot(`<div class="x-card x-agent"><span class="x-eyebrow">${T("via_agent",{name:esc(name)})}</span><p>${T("in_chal",{name:esc(name),what:T("tpl_"+k)})}</p><div class="x-kv"><span>${T("k_len")}</span><span>${T("d7")}</span><span>${T("k_mode")}</span><span>${T("mode_team")}</span><span>${T("k_shared")}</span><span>${T("shared_prog")}</span></div></div>`);
+  replies([[T("accept"),()=>{const ids=vJoined(c).map(m=>m.id);const ch={id:"h"+Date.now(),circle:c.id,tpl:k,days:7,mode:"team",start:v.day,state:"active",by:from.id,who:["me",...ids],acc:{},data:{me:[]}};ids.forEach(id=>{ch.acc[id]="yes";ch.data[id]=[]});v.chal.unshift(ch);
+      bot(T("in_yes",{name:esc(name)}));replies([[T("next_day"),()=>v3NextDay(1),{silent:true}],[T("c_board"),()=>v3Go("circle"),{silent:true}],[T("m_back"),v3End,{silent:true}]])},{cls:"go",react:"achievement"}],
+    [T("decline"),()=>{bot(T("in_no",{name:esc(name)}));v3End()}],[T("later_btn"),()=>{bot(T("in_later"));v3End()}]])}
+/* score of one participant: average % of their own daily goal, capped at 130 so one huge day can't decide it */
+function vScore(ch,id){const a=ch.data[id]||[];if(!a.length)return 0;return Math.round(a.reduce((s,x)=>s+Math.min(130,x),0)/a.length)}
+function vTeam(ch){const ids=Object.keys(ch.data);const done=ids.reduce((s,id)=>s+(ch.data[id]||[]).reduce((a,x)=>a+Math.min(130,x),0),0);return Math.min(100,Math.round(done/(ids.length*ch.days*100)*100))}
+function vBoard(ch){return Object.keys(ch.data).map(id=>({id,name:id==="me"?T("you"):nm(cm(id)),sc:vScore(ch,id)})).sort((a,b)=>b.sc-a.sc)}
+function v3ChalTick(ch,events){const v=V();Object.keys(ch.acc).forEach(id=>{if(ch.acc[id]==="wait"){ch.acc[id]="yes";ch.data[id]=[];events.push(T("ev_joined",{name:nm(cm(id)),what:T("tpl_"+ch.tpl)}))}});
+  const n=ch.data.me.length;const y=v.steps[v.steps.length-1];
+  Object.keys(ch.data).forEach(id=>{const r=vRng(ch.id+"|"+id+"|"+n);const pct=id==="me"?(ch.tpl==="steps"?Math.round(y.n/v.target*100):Math.round(70+r()*50)):Math.round(58+r()*62);ch.data[id].push(pct)});
+  if(ch.data.me.length>=ch.days){ch.state="done";const team=vTeam(ch),me=vScore(ch,"me");const ok=ch.mode==="team"?team>=80:me>=80;const got=ok?v3Pts("p_chal",40,V3T[ch.tpl].ver):0;ch.got=got;
+    events.push(T(ch.mode==="team"?(ok?"ev_done_team":"ev_miss_team"):(ok?"ev_done_rank":"ev_miss_rank"),{what:T("tpl_"+ch.tpl),pct:ch.mode==="team"?team:me})+(got?` ${vPts(got)}`:""))}
+  else events.push(T(ch.mode==="team"?"ev_prog_team":"ev_prog_rank",{what:T("tpl_"+ch.tpl),day:ch.data.me.length,days:ch.days,pct:ch.mode==="team"?vTeam(ch):vScore(ch,"me")}))}
+
+/* ---------- Agent-relayed messages ---------- */
+const V3_HEALTH=/\b(diabet|glucose|sugar|a1c|blood pressure|bp\b|metformin|insulin|diagnos|cancer|depress|anxiety|medic|pill|weigh|kg\b|pregnan)|سكر|ضغط|دواء|تشخيص|اكتئاب|وزن/i;
+const V3_ABUSE=/\b(stupid|idiot|fat|lazy|loser|hate you|shut up|ugly|pathetic)\b|غبي|سمين|كسول|فاشل/i;
+function v3RelayPick(c){v3Enter();const J=vJoined(c);if(!J.length){bot(T("ch_nobody"));v3End();return}bot(T("r_who"));replies(J.map(m=>[nm(cm(m.id)),()=>v3RelayWhat(m.id)]))}
+function v3RelayWhat(id){const v=V(),name=nm(cm(id));if(v.relayDay.d!==v.day)v.relayDay={d:v.day,n:0};
+  if(v.relayDay.n>=5){bot(T("r_limit"));v3End();return}
+  const mem=v.circles.flatMap(c=>c.members).find(m=>m.id===id);if(mem&&mem.muted){bot(T("r_muted",{name:esc(name)}));v3End();return}
+  bot(T("r_what",{name:esc(name)}));v.await={k:"relay",id};replies([1,2,3].map(i=>[T("r_s"+i),()=>v3RelayDraft(id,T("r_s"+i))]))}
+function v3RelayDraft(id,text,o={}){const v=V(),name=nm(cm(id));v.await=null;clearReplies();
+  if(V3_ABUSE.test(text)){bot(T("r_abuse"));v.await={k:"relay",id};replies([[T("cancel"),v3End]]);return}
+  if(V3_HEALTH.test(text)&&!o.ok){bot(T("r_health"));replies([[T("r_health_ok"),()=>v3RelayDraft(id,text,{ok:true})],[T("r_rewrite"),()=>{bot(T("r_what",{name:esc(name)}));v.await={k:"relay",id}}],[T("cancel"),v3End]]);return}
+  bot(`<div class="x-card x-agent"><span class="x-eyebrow">${T("r_draft",{name:esc(name)})}</span><p>“${esc(text)}”</p><div class="x-kv"><span>${T("k_shared")}</span><span>${T("r_only")}</span><span>${T("k_notshared")}</span><span>${T("r_never")}</span><span>${T("k_when")}</span><span>${T("r_goodtime",{name:esc(name)})}</span></div></div>`);
+  replies([[T("approve_send"),()=>v3RelaySend(id,text),{cls:"go"}],[T("r_rewrite"),()=>{bot(T("r_what",{name:esc(name)}));v.await={k:"relay",id}}],[T("cancel"),v3End]])}
+function v3RelaySend(id,text){const v=V(),name=nm(cm(id));v.relayDay.n++;const m={id:"r"+Date.now(),who:id,text,d:v.day,dir:"out",state:"delivered"};v.relay.unshift(m);v3Audit("a_relay",{name});
+  sys(T("r_delivered",{name:esc(name)}));const rep=T("r_reply"+(1+v.relay.length%3));
+  later(()=>new Promise(r=>setTimeout(r,reduced?50:900)));sys(T("sim_later"));
+  bot(`<div class="x-card x-agent"><span class="x-eyebrow">${T("via_agent",{name:esc(name)})}</span><p>“${esc(rep)}”</p></div>`);
+  v.relay.unshift({id:"r"+Date.now()+"b",who:id,text:rep,d:v.day,dir:"in",state:"delivered"});
+  replies([[T("r_again"),()=>v3RelayWhat(id)],[T("co_find"),()=>v3CoordFind(id)],[T("m_back"),v3End,{silent:true}]])}
+/* ---------- Agent-to-agent scheduling ---------- */
+function vSlots(){const mk=(add,h,m)=>{const d=vDate(add);d.setHours(h,m,0,0);return d};return[mk(1,18,20),mk(2,6,0),mk(3,17,30)]}
+const vSlotFmt=d=>d.toLocaleString(LOCALE[S.lang],{weekday:"long",hour:"numeric",minute:"2-digit"});
+function v3CoordPick(c){v3Enter();const J=vJoined(c);if(!J.length){bot(T("ch_nobody"));v3End();return}bot(T("co_who"));replies(J.map(m=>[nm(cm(m.id)),()=>v3CoordFind(m.id)]))}
+function v3CoordFind(id){const name=nm(cm(id));bot(T("co_working",{name:esc(name)}),{delay:900});const sl=vSlots();
+  bot(`<div class="x-card x-agent"><span class="x-eyebrow">${T("co_found",{name:esc(name)})}</span><ul class="x-lines">${sl.map(d=>`<li><span>${vSlotFmt(d)}</span></li>`).join("")}</ul><p class="x-note">${T("co_privacy")}</p></div>`);
+  replies([...sl.map(d=>[vSlotFmt(d),()=>v3CoordBook(id,d)]),[T("cancel"),v3End]])}
+function v3CoordBook(id,d){const v=V(),name=nm(cm(id));v.plans.unshift({who:id,at:d.getTime(),what:"walk"});v3Audit("a_coord",{name});
+  bot(T("co_done",{name:esc(name),when:vSlotFmt(d)}));addUpdate(()=>T("up_walk",{name:nm(cm(id)),when:vSlotFmt(d)}));flashHQ();v3End()}
+
+/* ---------- Proactive detection ---------- */
+function v3Signal(kind){v3Enter();const v=V();
+  if(!v.consent.coach||!v.consent.wear){bot(T("sg_consent"));replies([[T("open_privacy"),()=>v3Go("privacy"),{silent:true}],[T("m_back"),v3End,{silent:true}]]);return}
+  if(v.proDay===v.day){sys(T("sg_cap"));v3End();return}
+  v.proDay=v.day;const sg={id:"s"+Date.now(),kind:kind||"recovery",d:v.day,state:"open"};v.signals.unshift(sg);
+  sys(T("sim_morning",{when:vFmt(vDate())}));
+  bot(`<div class="x-card x-alert"><span class="x-eyebrow">${T("sg_eyebrow")}</span><p>${T("sg_"+sg.kind,{name:esc(S.name||"")})}</p><ul class="x-lines"><li><span>${T("sg_rhr")}</span><b>+8 ${T("bpm")}</b></li><li><span>${T("sg_sleep")}</span><b>−50 ${T("min")}</b></li><li><span>${T("sg_hrv")}</span><b>−18%</b></li></ul><p class="x-note">${T("sg_src",{src:T(vWear()?"src_wear":"src_sim")})}</p></div>`);
+  bot(T("sg_q"));
+  replies([[T("sg_fine"),()=>v3SigAns(sg,"fine")],[T("sg_off"),()=>v3SigAns(sg,"off")],[T("sg_sym"),()=>{sg.state="triage";v3Leave();pickSymptom()}],[T("sg_why"),()=>{bot(T("sg_why_msg"));replies([[T("sg_fine"),()=>v3SigAns(sg,"fine")],[T("sg_off"),()=>v3SigAns(sg,"off")]])}]])}
+function v3SigAns(sg,a){sg.state=a==="fine"?"adjusted":"watch";bot(T(a==="fine"?"sg_fine_msg":"sg_off_msg"));
+  replies([[T("sg_easy"),()=>{sg.easy=true;bot(T("sg_easy_msg"));addUpdate(()=>T("up_easy"));flashHQ();v3End()},{cls:"go"}],[T("sg_keep"),()=>{bot(T("sg_keep_msg"));v3End()}],...(a==="off"?[[T("sg_sym"),()=>{sg.state="triage";v3Leave();pickSymptom()}]]:[])])}
+
+/* ---------- Medication and home readings ---------- */
+function vAdh(m,days=14){let a=0,n=0;for(let i=V().day-days;i<V().day;i++){const l=m.log[i];if(l){n+=l.length;a+=l.filter(Boolean).length}}return n?Math.round(a/n*100):0}
+function v3MedsChat(){v3Enter();const v=V();const m=v.meds[0];
+  bot(`<div class="x-card"><span class="x-eyebrow">${T("md_eyebrow")}</span><b>${T("med_"+m.id)} ${m.dose}</b><p>${T(v.ramadan?"md_when_ram":"md_when")}</p><p class="x-note">${T("md_safe")}</p></div>`);
+  replies([[T("md_taken"),()=>v3MedTaken(m),{cls:"go"}],[T("md_skip"),()=>v3MedSkip(m)],[T("m_reading"),v3AskReading],[T("md_open"),()=>v3Go("meds"),{silent:true}]])}
+function v3MedTaken(m){const v=V();const l=m.log[v.day]||(m.log[v.day]=[]);if(l.length<m.times)l.push(true);m.left=Math.max(0,m.left-1);const got=v3Pts("p_med",2,"self");
+  bot(T("md_taken_msg")+(got?` ${vPts(got)}`:""));
+  if(m.left<=7&&!m.refill){bot(T("md_low",{n:m.left,med:T("med_"+m.id)}));replies([[T("md_refill"),()=>v3Refill(m),{cls:"go"}],[T("later_btn"),v3End]]);return}v3End()}
+function v3Refill(m){m.refill=V().day;v3Audit("a_refill",{med:T("med_"+m.id)});bot(`<div class="x-card"><span class="x-eyebrow">${T("ph_pharm")}</span><p>${T("md_refill_msg",{med:T("med_"+m.id)})}</p></div>`);renderHQ();if(V().ret||S.coreDone)v3End()}
+function v3MedSkip(m){const v=V();const l=m.log[v.day]||(m.log[v.day]=[]);if(l.length<m.times)l.push(false);bot(T("md_skip_q"));
+  replies([[T("md_r_forgot"),()=>{bot(T("md_forgot_msg"));v3End()}],[T("md_r_side"),()=>{bot(T("md_side_msg"));replies([[T("esc_nurse"),()=>v3Callback("side"),{cls:"go"}],[T("notnow"),v3End]])}],[T("md_r_out"),()=>v3Refill(m)],[T("md_r_fast"),()=>{bot(T("md_fast_msg"));replies([[T("esc_nurse"),()=>v3Callback("fast"),{cls:"go"}],[T("notnow"),v3End]])}]])}
+function v3AskReading(){v3Enter();bot(T("rd_ask"));V().await={k:"reading"};replies([["BP 128/82",()=>v3Reading("BP 128/82")],["BP 164/101",()=>v3Reading("BP 164/101")],["BP 186/122",()=>v3Reading("BP 186/122")],[T("rd_g1"),()=>v3Reading("glucose 6.1")],[T("rd_g2"),()=>v3Reading("glucose 14.8")],[T("m_back"),v3End,{silent:true}]])}
+const V3_BP=/(\d{2,3})\s*[\/\\]\s*(\d{2,3})/;
+const V3_GLU=/(?:glu[ck]os[ea]?|sugar|az[uú]car|سكر|جلوكوز)\D{0,14}(\d{1,3}(?:[.,]\d)?)/i;
+function v3Reading(x){const v=V();v.await=null;clearReplies();const b=x.match(V3_BP),g=!b&&x.match(V3_GLU);
+  if(b){const sys_=+b[1],dia=+b[2];if(sys_<60||sys_>260||dia<30||dia>160){bot(T("rd_bad"));v.await={k:"reading"};return true}
+    v.bp.push({d:v.day,sys:sys_,dia});v3Pts("p_reading",2,"self");
+    if(sys_>=180||dia>=120){v3Esc(4,"bp_crisis");bot(`<div class="x-card x-urgent"><span class="x-eyebrow">${T("esc_urgent")}</span><p>${T("rd_bp_crisis",{v:`${sys_}/${dia}`})}</p></div>`);replies([[T("rd_recheck"),v3AskReading],[T("sg_sym"),()=>{v3Leave();pickSymptom()}],[T("esc_nurse"),()=>v3Callback("bp")]]);return true}
+    const high=sys_>=140||dia>=90;const hi7=v.bp.filter(r=>r.d>v.day-7&&(r.sys>=140||r.dia>=90)).length;
+    if(high&&hi7>=3){v3Esc(3,"bp_trend");bot(T("rd_bp_trend",{v:`${sys_}/${dia}`,n:hi7}));replies([[T("gp_book"),()=>v3Book({id:"bpv",status:"due"}),{cls:"go"}],[T("esc_nurse"),()=>v3Callback("bp")],[T("notnow"),v3End]]);return true}
+    bot(T(high?"rd_bp_high":"rd_bp_ok",{v:`${sys_}/${dia}`}));v3End();return true}
+  if(g){let val=parseFloat(g[1].replace(",","."));if(val>40)val=Math.round(val/18*10)/10;if(val<1||val>40){bot(T("rd_bad"));v.await={k:"reading"};return true}
+    v.glu.push({d:v.day,v:val});v3Pts("p_reading",2,"self");
+    if(val<3.9){v3Esc(val<3?4:3,"glu_low");bot(`<div class="x-card ${val<3?"x-urgent":"x-alert"}"><span class="x-eyebrow">${T(val<3?"esc_urgent":"esc_act")}</span><p>${T(val<3?"rd_glu_vlow":"rd_glu_low",{v:val})}</p></div>`);replies([[T("rd_recheck"),v3AskReading],[T("esc_nurse"),()=>v3Callback("glu")]]);return true}
+    if(val>=16.7){v3Esc(4,"glu_high");bot(`<div class="x-card x-urgent"><span class="x-eyebrow">${T("esc_urgent")}</span><p>${T("rd_glu_vhigh",{v:val})}</p></div>`);replies([[T("sg_sym"),()=>{v3Leave();pickSymptom()}],[T("esc_nurse"),()=>v3Callback("glu")],[T("rd_recheck"),v3AskReading]]);return true}
+    if(val>=13.9){v3Esc(2,"glu_high");bot(T("rd_glu_high",{v:val}));replies([[T("esc_nurse"),()=>v3Callback("glu")],[T("rd_recheck"),v3AskReading],[T("notnow"),v3End]]);return true}
+    bot(T(val>10?"rd_glu_above":"rd_glu_ok",{v:val}));v3End();return true}
+  bot(T("rd_bad"));v.await={k:"reading"};return true}
+/* ---------- Escalation ---------- */
+function v3Esc(level,k){V().esc.unshift({d:V().day,level,k,state:"open"});v3Audit("a_esc",{level})}
+function v3Callback(why){const v=V();bot(T("esc_share_q"));
+  const go=share=>{v.esc.unshift({d:v.day,level:3,k:"callback",state:"requested",share});v3Audit(share?"a_share_nurse":"a_callback");
+    bot(`<div class="x-card"><span class="x-eyebrow">${T("ph_nurse")}</span><p>${T("esc_cb_msg")}</p><p class="x-note">${T(share?"esc_cb_shared":"esc_cb_notshared")}</p></div>`);v3End()};
+  replies([[T("esc_share_yes"),()=>go(true),{cls:"go"}],[T("esc_share_no"),()=>go(false)],[T("cancel"),v3End]])}
+
+/* ---------- Preventive care gaps ---------- */
+function v3GapsChat(){v3Enter();const v=V();const g=v.gaps.filter(x=>x.status==="due").sort((a,b)=>a.due-b.due)[0];
+  if(!g){bot(T("gp_none"));v3End();return}v3GapCard(g)}
+function v3GapCard(g){v3Enter();bot(`<div class="x-card"><span class="x-eyebrow">${T(g.due<=V().day?"gp_overdue":"gp_due")}</span><b>${T("gap_"+g.id)}</b><p>${T("gap_"+g.id+"_why")}</p><p class="x-note">${T("gp_basis")}: ${T("gap_"+g.id+"_src")}. ${T("gp_reward")}</p></div>`);
+  replies([[T("gp_book"),()=>v3Book(g),{cls:"go"}],[T("gp_done"),()=>v3GapDone(g)],[T("gp_later"),()=>{g.status="snoozed";g.snooze=V().day+14;bot(T("gp_later_msg"));v3End()}],[T("gp_all"),()=>v3Go("prevention"),{silent:true}]])}
+function v3Book(g){const sl=vSlots().map((d,i)=>{const x=new Date(d);x.setHours([9,11,15][i],[10,40,15][i]);return x});bot(T("gp_slots"));
+  replies([...sl.map((d,i)=>[vSlotFmt(d),()=>{const real=V().gaps.find(x=>x.id===g.id);if(real){real.status="booked";real.appt=V().day+i+1;real.at=d.getTime()}
+      if(S.record&&S.record.appointments)S.record.appointments.unshift({resourceType:"Appointment",id:"ap-elia-"+Date.now(),meta:{source:"elia"},_org:"elia",status:"booked",start:d.toISOString().slice(0,19),description:real?T("gap_"+g.id):T("gap_bpv")});
+      v3Audit("a_book");bot(`<div class="x-card"><span class="x-eyebrow">${T("ph_sched")}</span><b>${real?T("gap_"+g.id):T("gap_bpv")}</b><p>${vSlotFmt(d)}</p><p class="x-note">${T("gp_booked_note")}</p></div>`);addUpdate(()=>T("up_booked",{what:real?T("gap_"+g.id):T("gap_bpv")}));flashHQ();v3End()}]),[T("cancel"),v3End]])}
+function v3GapDone(g){bot(T("gp_done_q"));const fin=k=>{g.status="done";g.self=true;g.doneOn=V().day;const got=v3Pts("p_gap_self",10,"self");bot(T("gp_done_msg")+(got?` ${vPts(got)}`:""));v3End()};
+  replies([[T("gp_w1"),()=>fin(1)],[T("gp_w2"),()=>fin(2)],[T("gp_w3"),()=>{bot(T("gp_old_msg"));v3GapCard(g)}]])}
+
+/* ---------- Weekly review (behaviour loop) ---------- */
+function v3Week(){v3Enter();const v=V();const a=v.steps.slice(-7),b=v.steps.slice(-14,-7);const avg=x=>x.length?x.reduce((s,y)=>s+y.n,0)/x.length:0;const A=avg(a),B=avg(b);const hit=a.filter(x=>x.n>=v.target).length;
+  const adh=Math.round(v.meds.reduce((s,m)=>s+vAdh(m,7),0)/v.meds.length);const pts=v.pts.ledger.filter(x=>x.d>v.day-7&&x.pts>0).reduce((s,x)=>s+x.pts,0);
+  bot(`<div class="x-card"><span class="x-eyebrow">${T("wk_eyebrow")}</span><ul class="x-lines"><li><span>${T("wk_steps")}</span><b>${vNum(A)}</b></li><li><span>${T("wk_days",{t:vNum(v.target)})}</span><b>${hit}/7</b></li><li><span>${T("wk_meds")}</span><b>${adh}%</b></li><li><span>${T("wk_pts")}</span><b>${pts}</b></li></ul><p>${T(A>=B?"wk_up":"wk_down",{d:vNum(Math.abs(A-B))})}</p><p class="x-note">${T("wk_nostreak")}</p></div>`);
+  bot(T(hit>=5?"wk_q_hard":hit<=2?"wk_q_easy":"wk_q_keep"));
+  const set=f=>{v.target=Math.max(2000,Math.round(v.target*f/100)*100);bot(T("wk_set",{t:vNum(v.target)}));addUpdate(()=>T("up_target",{t:vNum(v.target)}));flashHQ();v3End()};
+  replies([[T("wk_keep"),()=>{bot(T("wk_keep_msg"));v3End()}],[T("wk_easier"),()=>set(0.9)],[T("wk_harder"),()=>set(1.1)]])}
+
+/* ---------- Population challenges (member side) ---------- */
+const V3G=[["muscat","Muscat","مسقط",41200],["dhofar","Dhofar","ظفار",12800],["nbatinah","Al Batinah North","شمال الباطنة",22100],["sbatinah","Al Batinah South","جنوب الباطنة",13900],["dakhiliyah","Ad Dakhiliyah","الداخلية",14700],["nsharqiyah","Ash Sharqiyah North","شمال الشرقية",8200],["ssharqiyah","Ash Sharqiyah South","جنوب الشرقية",9100],["dhahirah","Ad Dhahirah","الظاهرة",6400],["buraimi","Al Buraimi","البريمي",3900],["musandam","Musandam","مسندم",1450],["wusta","Al Wusta","الوسطى",1280]];
+const gName=g=>S.lang==="ar"?g[2]:g[1];
+const pName=p=>p.name[S.lang]||p.name.en;
+function v3PopInvite(p){v3Enter();const v=V();p=p||v.pop.find(x=>x.state==="invited");if(!p){bot(T("pop_none"));v3End();return}
+  if(!v.consent.sponsor){sys(T("pop_blocked"));v3End();return}
+  bot(`<div class="x-card x-agent"><span class="x-eyebrow">${T("pop_from")}</span><b>${esc(pName(p))}</b><p>${T("pop_invite")}</p><div class="x-kv"><span>${T("k_team")}</span><span>${gName(V3G.find(g=>g[0]===v.gov))}</span><span>${T("k_len")}</span><span>${T("n_days",{n:p.days})}</span><span>${T("k_shared")}</span><span>${T("pop_shared")}</span><span>${T("k_notshared")}</span><span>${T("pop_never")}</span></div></div>`);
+  replies([[T("pop_join"),()=>{p.state="joined";p.start=v.day;v3Audit("a_pop",{name:pName(p)});bot(T("pop_joined",{team:gName(V3G.find(g=>g[0]===v.gov))}));replies([[T("pop_board"),()=>v3Go("circle"),{silent:true}],[T("next_day"),()=>v3NextDay(1),{silent:true}],[T("m_back"),v3End,{silent:true}]])},{cls:"go",react:"achievement"}],
+    [T("decline"),()=>{p.state="declined";bot(T("pop_declined"));v3End()}],[T("pop_stop"),()=>{v.consent.sponsor=false;p.state="declined";v3Audit("a_consent");bot(T("pop_stopped"));v3End()}]])}
+/* governorate standings for a population challenge: average % of personal goal, small groups hidden */
+function vPopBoard(p){const v=V();const day=Math.max(1,v.day-p.start+1);return V3G.map(g=>{const r=vRng(p.id+"|"+g[0]);const part=Math.round(g[3]*(0.18+r()*0.2));const sc=Math.round(62+r()*30+Math.min(6,day*0.4)*(r()-0.3));return{g,part,sc:Math.max(40,Math.min(118,sc)),sup:part<50||g[3]<1400}}).sort((a,b)=>(a.sup-b.sup)||(b.sc-a.sc))}
+
+/* ---------- Day simulation ---------- */
+function v3NextDay(n=1){v3Enter();const v=V();const events=[];let y;
+  for(let i=0;i<n;i++){const r=vRng("d|"+v.day+"|"+v.base);const boost=v.chal.some(c=>c.state==="active")?1.08:1;const easy=v.signals.some(s=>s.easy&&s.d===v.day)?0.7:1;
+    y={d:v.day,n:Math.round(v.base*(0.78+r()*0.52)*boost*easy)};v.steps.push(y);const last=i===n-1;const ev=[];
+    v.meds.forEach(m=>{if(!m.log[v.day]||m.log[v.day].length<m.times){const l=m.log[v.day]||(m.log[v.day]=[]);while(l.length<m.times){l.push(r()>0.14);m.left=Math.max(0,m.left-1)}}});
+    if(y.n>=v.target)v3Pts("p_steps",10,vWear()?"wear":"phone");
+    v.chal.filter(c=>c.state==="active").forEach(c=>v3ChalTick(c,ev));
+    v.pop.filter(p=>p.state==="joined").forEach(p=>{p.mine+=y.n});
+    v.day++;
+    v.circles.forEach(c=>c.members.forEach(m=>{if(m.state==="invited"&&!m.blocked){m.state="joined";ev.push(T("c_joined",{who:nm(cm(m.id))}))}}));
+    v.gaps.forEach(g=>{if(g.status==="booked"&&v.day>=g.appt){g.status="done";g.self=false;g.doneOn=v.day;const got=v3Pts("p_gap",50,"clinic");ev.push(T("ev_gap",{what:T("gap_"+g.id)})+` ${vPts(got)}`)}if(g.status==="snoozed"&&v.day>=g.snooze)g.status="due"});
+    v.signals.forEach(s=>{if((s.state==="adjusted"||s.state==="watch")&&v.day>s.d){s.state="resolved";ev.push(T("ev_signal"))}});
+    v.meds.forEach(m=>{if(m.refill!=null&&v.day>m.refill){m.left+=30;m.refill=null;ev.push(T("ev_refill",{med:T("med_"+m.id)}))}});
+    if(last)events.push(...ev);else ev.filter(e=>/x-pts/.test(e)).forEach(e=>events.push(e))}
+  sys(T("sim_day",{when:vFmt(vDate())}));
+  const ok=y.n>=v.target;
+  bot(`<div class="x-card"><span class="x-eyebrow">${T("mu_eyebrow")}</span><ul class="x-lines"><li><span>${T("mu_steps",{n:vNum(y.n)})} ${vVer(vWear()?"wear":"phone")}</span>${ok?vPts(10):""}</li>${events.map(e=>`<li><span>${e}</span></li>`).join("")}</ul><p class="x-note">${T(ok?"mu_hit":"mu_miss",{t:vNum(v.target)})}</p></div>`);
+  renderHQ();flashHQ();
+  const due=v.gaps.find(g=>g.status==="due"&&g.due<=v.day&&!g.nudged);const low=v.meds.find(m=>m.left<=5&&m.refill==null&&!m.nudged);
+  if(low){low.nudged=true;bot(T("md_low",{n:low.left,med:T("med_"+low.id)}));replies([[T("md_refill"),()=>v3Refill(low),{cls:"go"}],[T("later_btn"),v3End]]);return}
+  if(due&&v.day%2===0){due.nudged=true;v3GapCard(due);return}
+  replies([[T("next_day"),()=>v3NextDay(1),{silent:true}],[T("next_week"),()=>v3NextDay(7),{silent:true}],[T("c_board"),()=>v3Go("circle"),{silent:true}],[T("m_back"),v3End,{silent:true}]])}
+
+/* ---------- Free-text routing for the new flows ---------- */
+function v3Route(x){const v=V();
+  if(v.await&&v.await.k==="relay"){v3RelayDraft(v.await.id,x.trim().slice(0,280));return true}
+  if(v.await&&v.await.k==="reading")return v3Reading(x);
+  if(S.await||S.sim)return false;
+  if((/\b(bp|blood pressure|presi[oó]n)\b|ضغط/i.test(x)&&V3_BP.test(x))||V3_GLU.test(x)){v3Enter();return v3Reading(x)}
+  if(/\b(circle|c[ií]rculo)\b|دائرت|دائرة/i.test(x)){v3CircleHome();return true}
+  if(/\b(challenge|reto|desaf[ií]o)\b|تحد/i.test(x)){const c=v.circles[0];c?v3ChalNew(c):v3CircleHome();return true}
+  if(/\b(rewards?|points?|puntos|recompensas?)\b|نقاط|مكاف/i.test(x)){bot(T("rw_bal",{n:v.pts.bal}));v3Go("rewards");return true}
+  if(/\b(screening|vaccine|check-?up|care gaps?|vacuna)\b|فحص|لقاح|تطعيم/i.test(x)){v3GapsChat();return true}
+  if(/\b(medication|medicine|refill|pills?|medicamento)\b|دواء|أدوية/i.test(x)){v3MedsChat();return true}
+  return false}
+
+/* ===== ELIA v3: HQ tabs ===== */
+const xH=(k)=>`<div><h2>${T(k+"_title")}</h2></div><p class="hq-sub">${T(k+"_sub")}</p>`;
+const xTog=(act,a,on,dis)=>`<button class="x-tog" role="switch" aria-checked="${on?"true":"false"}" data-x="${act}" data-a="${a}"${dis?" disabled":""} aria-label="${T("toggle")}"></button>`;
+function xSpark(vals,lo,hi){if(vals.length<2)return"";const w=300,h=46,mn=Math.min(...vals,lo??Infinity)*0.94,mx=Math.max(...vals,hi??-Infinity)*1.04,sx=i=>4+i*(w-8)/(vals.length-1),sy=v=>h-4-(v-mn)/(mx-mn||1)*(h-8);
+  return`<svg class="x-spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">${hi!=null?`<line x1="0" x2="${w}" y1="${sy(hi)}" y2="${sy(hi)}" stroke="var(--warn)" stroke-dasharray="3 4" stroke-width="1"/>`:""}<polyline fill="none" stroke="var(--teal)" stroke-width="2" stroke-linejoin="round" points="${vals.map((v,i)=>`${sx(i).toFixed(1)},${sy(v).toFixed(1)}`).join(" ")}"/>${vals.map((v,i)=>`<circle cx="${sx(i).toFixed(1)}" cy="${sy(v).toFixed(1)}" r="2.4" fill="${hi!=null&&v>=hi?"var(--warn)":"var(--teal)"}"/>`).join("")}</svg>`}
+const xPill=(k,cls)=>`<span class="pill ${cls}">${T(k)}</span>`;
+const xDay=d=>d===V().day?T("today"):vDay(d);
+
+/* ----- My Circle ----- */
+function hqCircle(){const v=V();let h=xH("ci");
+  if(!v.consent.circle)return h+`<div class="empty">${T("c_off")}<br><button class="x-btn" data-goto="privacy" style="margin-top:10px">${T("open_privacy")}</button></div>`;
+  if(!v.circles.length)h+=`<div class="empty">${T("ci_empty")}<br><button class="x-btn pri" data-x="chat" data-a="circle" style="margin-top:10px">${T("ci_start")}</button></div>`;
+  v.circles.forEach(c=>{h+=`<div class="panel"><div class="x-h3"><h3>${T("c_"+c.kind)} · ${T("ci_members",{n:vJoined(c).length+1})}</h3><span class="x-row"><button class="x-btn pri" data-x="chat" data-a="chal">${T("ch_new")}</button><button class="x-btn" data-x="chat" data-a="relay">${T("r_send")}</button><button class="x-btn" data-x="chat" data-a="coord">${T("co_find")}</button></span></div>
+    <ul class="x-list"><li><span class="x-av me">${esc((S.name||T("you")).charAt(0).toUpperCase())}</span><span class="x-grow"><b>${esc(S.name||T("you"))}</b><small>${T("ci_owner")}</small></span></li>
+    ${c.members.map(m=>{const p=cm(m.id);return`<li><span class="x-av">${esc(nm(p).charAt(0))}</span><span class="x-grow"><b>${esc(nm(p))}</b><small>${T("rel_"+p.rel)} · ${T("ci_"+(m.blocked?"blocked":m.state))}${m.muted?" · "+T("ci_muted"):""}</small></span>
+      ${m.blocked?"":`<button class="x-btn" data-x="mute" data-a="${c.id}|${m.id}">${T(m.muted?"ci_unmute":"ci_mute")}</button>`}<button class="x-btn danger" data-x="remove" data-a="${c.id}|${m.id}">${T("ci_remove")}</button><button class="x-btn danger" data-x="block" data-a="${c.id}|${m.id}">${T(m.blocked?"ci_unblock":"ci_block")}</button></li>`}).join("")}</ul>
+    <div class="x-sw"><div>${T("ci_share_steps")}<small>${T("ci_share_note")}</small></div>${xTog("share",c.id,c.share==="steps")}</div>
+    <div class="x-row"><button class="x-btn danger" data-x="leave" data-a="${c.id}">${T("ci_leave")}</button><span class="x-note">${T("ci_safe")}</span></div></div>`});
+  const act=v.chal.filter(c=>c.state!=="declined");
+  if(act.length)h+=`<div class="grid2">${act.map(ch=>{const done=ch.state==="done",n=ch.data.me.length;
+    let b=`<div class="panel"><div class="x-h3"><h3>${T("tpl_"+ch.tpl)}</h3>${pill(done?"st_completed":"st_active",done?"p-good":"p-info")}</div><span class="x-note">${T("mode_"+ch.mode)} · ${T("ci_day",{d:Math.min(n,ch.days),n:ch.days})} · ${T("ver_"+V3T[ch.tpl].ver)}</span>`;
+    if(ch.mode==="team"){const t_=vTeam(ch);b+=`<div class="x-row"><span class="x-big">${t_}%</span><span class="x-unit">${T("ci_team_goal")}</span></div><div class="x-bar"><i style="width:${t_}%"></i></div><ul class="x-list">${Object.keys(ch.data).map(id=>`<li><span class="x-av${id==="me"?" me":""}">${esc((id==="me"?(S.name||T("you")):nm(cm(id))).charAt(0).toUpperCase())}</span><span class="x-grow">${id==="me"?T("you"):esc(nm(cm(id)))}</span><span class="x-note">${T("ci_days_in",{n:(ch.data[id]||[]).filter(x=>x>=80).length})}</span></li>`).join("")}</ul><span class="x-note">${T("ci_team_note")}</span>`}
+    else{const B=vBoard(ch);b+=`<ul class="x-list">${B.map((r,i)=>`<li><span class="x-rank">${i+1}</span><span class="x-av${r.id==="me"?" me":""}">${esc(r.name.charAt(0).toUpperCase())}</span><span class="x-grow"><b>${esc(r.name)}</b></span><div class="x-bar" style="max-width:110px"><i style="width:${Math.min(100,r.sc/1.3)}%"></i></div><b style="min-width:3.2em;text-align:end">${r.sc}%</b></li>`).join("")}</ul><span class="x-note">${T("ci_rank_note")}</span>`}
+    if(!done)b+=`<div class="x-row"><button class="x-btn danger" data-x="quit" data-a="${ch.id}">${T("ci_quit")}</button></div>`;
+    else if(ch.got)b+=`<div class="x-row">${vPts(ch.got)}</div>`;return b+"</div>"}).join("")}</div>`;
+  if(v.plans.length)h+=`<div class="panel"><h3>${T("ci_plans")}</h3><ul class="x-list">${v.plans.map(p=>`<li><span class="x-grow">${T("ci_walk",{name:esc(nm(cm(p.who)))})}<small>${vSlotFmt(new Date(p.at))} · ${T("ci_agents")}</small></span></li>`).join("")}</ul></div>`;
+  /* population challenges */
+  h+=`<div><h2 style="font-size:19px">${T("pop_title")}</h2></div><p class="hq-sub">${T("pop_sub")}</p>`;
+  v.pop.forEach(p=>{if(p.state==="joined"){const B=vPopBoard(p),mine=B.findIndex(r=>r.g[0]===v.gov);const show=B.filter((r,i)=>!r.sup&&(i<5||i===mine));
+      h+=`<div class="panel"><div class="x-h3"><h3>${esc(pName(p))}</h3>${pill("st_active","p-info")}</div><span class="x-note">${T("pop_mine",{n:vNum(p.mine)})} · ${T("ci_day",{d:Math.min(p.days,Math.max(1,v.day-p.start+1)),n:p.days})}</span>
+        <ul class="x-list">${show.map(r=>{const i=B.indexOf(r);return`<li><span class="x-rank">${i+1}</span><span class="x-grow"><b>${gName(r.g)}</b>${r.g[0]===v.gov?` <span class="x-ver v">${T("pop_yours")}</span>`:""}<small>${T("pop_part",{n:vNum(r.part)})}</small></span><div class="x-bar" style="max-width:130px"><i style="width:${Math.min(100,r.sc/1.2)}%"></i></div><b style="min-width:3.2em;text-align:end">${r.sc}%</b></li>`}).join("")}</ul>
+        <span class="x-note">${T("pop_note",{n:B.filter(r=>r.sup).length})}</span><div class="x-row"><button class="x-btn danger" data-x="popquit" data-a="${p.id}">${T("pop_leave")}</button></div></div>`}
+    else h+=`<div class="panel"><div class="x-h3"><h3>${esc(pName(p))}</h3>${pill(p.state==="declined"?"st_paused":"st_proposed",p.state==="declined"?"p-warn":"p-mute")}</div><span class="x-note">${T("pop_from")} · ${T("n_days",{n:p.days})}</span><div class="x-row"><button class="x-btn pri" data-x="chat" data-a="pop|${p.id}">${T("pop_view")}</button></div></div>`});
+  if(v.relay.length)h+=`<div class="panel"><h3>${T("ci_relay")}</h3><ul class="x-list">${v.relay.slice(0,8).map(r=>`<li><span class="x-av">${esc(nm(cm(r.who)).charAt(0))}</span><span class="x-grow">“${esc(r.text)}”<small>${T(r.dir==="out"?"ci_to":"ci_from",{name:esc(nm(cm(r.who)))})} · ${xDay(r.d)}</small></span>${r.dir==="in"?`<button class="x-btn danger" data-x="report" data-a="${r.id}">${T(r.reported?"ci_reported":"ci_report")}</button>`:""}</li>`).join("")}</ul><span class="x-note">${T("ci_relay_note")}</span></div>`;
+  return h}
+
+/* ----- Rewards ----- */
+function hqRewards(){const v=V();const today=v.pts.ledger.filter(x=>x.d===v.day&&x.pts>0&&x.ver!=="clinic"&&x.ver!=="prog").reduce((a,x)=>a+x.pts,0);
+  let h=xH("rw")+`<div class="grid2"><div class="panel"><h3>${T("rw_balance")}</h3><div class="x-row"><span class="x-big">${vNum(v.pts.bal)}</span><span class="x-unit">${T("pts")}</span></div><span class="x-note">${T("rw_cap",{n:today,cap:V3CAP})}</span><div class="x-bar" style="flex:none"><i style="width:${Math.min(100,today/V3CAP*100)}%"></i></div><span class="x-note">${T("rw_nostreak")}</span></div>
+    <div class="panel"><h3>${T("rw_how")}</h3><ul class="x-lines">${[["p_gap",50,"clinic"],["p_chal",40,"wear"],["p_steps",10,"wear"],["p_meal",8,"photo"],["p_gap_self",10,"self"],["p_med",2,"self"]].map(([k,n,ver])=>`<li><span>${T(k)} ${vVer(ver)}</span>${vPts(n)}</li>`).join("")}</ul><span class="x-note">${T("rw_how_note")}</span></div></div>`;
+  h+=`<div class="panel"><div class="x-h3"><h3>${T("rw_catalog")}</h3><span class="ph">${T("ph_sponsor")}</span></div><ul class="x-list">${V3R.map(r=>`<li><span class="x-grow"><b>${T("rwd_"+r.id)}</b><small>${T("rwd_"+r.id+"_d")}</small></span><span class="x-pts neg">${r.cost} ${T("pts")}</span><button class="x-btn pri" data-x="redeem" data-a="${r.id}"${v.pts.bal<r.cost?" disabled":""}>${T("rw_redeem")}</button></li>`).join("")}</ul></div>`;
+  if(v.redeemed.length)h+=`<div class="panel"><h3>${T("rw_mine")}</h3><ul class="x-list">${v.redeemed.map(r=>`<li><span class="x-grow"><b>${T("rwd_"+r.id)}</b><small>${xDay(r.d)}</small></span><span class="x-code">${r.code}</span></li>`).join("")}</ul></div>`;
+  h+=`<div class="panel"><h3>${T("rw_ledger")}</h3><div class="x-scroll"><table class="x-table"><thead><tr><th>${T("col_date")}</th><th>${T("col_what")}</th><th>${T("col_proof")}</th><th class="n">${T("pts")}</th></tr></thead><tbody>${v.pts.ledger.map((x,i)=>[x,i]).sort((p,q)=>q[0].d-p[0].d||p[1]-q[1]).map(p=>p[0]).slice(0,14).map(x=>`<tr><td>${xDay(x.d)}</td><td>${x.k.startsWith("rwd_")?T("rw_redeemed")+": "+T(x.k):T(x.k)}</td><td>${x.ver?vVer(x.ver):""}</td><td class="n">${vPts(x.pts)}</td></tr>`).join("")}</tbody></table></div></div>`;
+  return h}
+
+/* ----- Prevention ----- */
+function hqPrevention(){const v=V();const st=g=>g.status==="done"?xPill("gp_st_done","p-good"):g.status==="booked"?xPill("gp_st_booked","p-info"):g.status==="ok"?xPill("gp_st_ok","p-good"):g.status==="snoozed"?xPill("gp_st_snoozed","p-mute"):xPill(g.due<=v.day?"gp_overdue":"gp_due",g.due<=v.day?"p-warn":"p-mute");
+  const open=v.gaps.filter(g=>g.status==="due").length,done=v.gaps.filter(g=>g.status==="done"||g.status==="ok").length;
+  let h=xH("pv")+`<div class="x-tiles"><div class="x-tile"><b>${open}</b><span>${T("pv_open")}</span></div><div class="x-tile"><b>${v.gaps.filter(g=>g.status==="booked").length}</b><span>${T("pv_booked")}</span></div><div class="x-tile"><b>${done}/${v.gaps.length}</b><span>${T("pv_done")}</span></div></div>`;
+  h+=`<div class="panel"><ul class="x-list">${v.gaps.map(g=>`<li><span class="x-grow"><b>${T("gap_"+g.id)}</b> ${st(g)}<small>${T("gap_"+g.id+"_why")}</small><small>${T("gp_basis")}: ${T("gap_"+g.id+"_src")}${g.status==="booked"?` · ${vSlotFmt(new Date(g.at))}`:""}${g.status==="done"?` · ${vVer(g.self?"self":"clinic")}`:""}</small></span>
+    ${g.status==="due"||g.status==="snoozed"?`<button class="x-btn pri" data-x="chat" data-a="gap|${g.id}">${T("gp_book")}</button><button class="x-btn" data-x="gapdone" data-a="${g.id}">${T("gp_done")}</button>`:""}</li>`).join("")}</ul></div>
+  <div class="min-note">${T("pv_note")}</div>`;return h}
+
+/* ----- Medication and home readings ----- */
+function hqMeds(){const v=V();let h=xH("md");
+  h+=`<div class="grid2">${v.meds.map(m=>{const a=vAdh(m);return`<div class="panel"><div class="x-h3"><h3>${T("med_"+m.id)} ${m.dose}</h3>${m.refill!=null?xPill("md_refill_sent","p-info"):m.left<=7?xPill("md_low_pill","p-warn"):""}</div><span class="x-note">${T("md_sched_"+m.times)}</span>
+    <div class="x-row"><span class="x-big">${a}%</span><span class="x-unit">${T("md_adh")}</span></div><div class="x-bar${a<80?" warn":""}" style="flex:none"><i style="width:${a}%"></i></div>
+    <div class="x-row sp"><span class="x-note">${T("md_left",{n:m.left})}</span><span class="x-row"><button class="x-btn" data-x="chat" data-a="meds">${T("md_log")}</button><button class="x-btn pri" data-x="refill" data-a="${m.id}"${m.refill!=null?" disabled":""}>${T("md_refill")}</button></span></div></div>`}).join("")}</div>`;
+  const bp=v.bp.slice(-10),gl=v.glu.slice(-10),lb=bp[bp.length-1],lg=gl[gl.length-1];
+  h+=`<div class="grid2"><div class="panel"><h3>${T("rd_bp")}</h3>${lb?`<div class="x-row"><span class="x-big">${lb.sys}/${lb.dia}</span><span class="x-unit">mmHg · ${xDay(lb.d)}</span>${lb.sys>=180||lb.dia>=120?xPill("rd_p_urgent","p-bad"):lb.sys>=140||lb.dia>=90?xPill("rd_p_high","p-warn"):xPill("rd_p_ok","p-good")}</div>`:""}${xSpark(bp.map(r=>r.sys),null,140)}<span class="x-note">${T("rd_bp_note")}</span>
+      <form class="x-form" data-xf="bp"><input name="v" inputmode="numeric" placeholder="128/82" aria-label="${T("rd_bp")}"><button class="x-btn pri">${T("rd_add")}</button></form></div>
+    <div class="panel"><h3>${T("rd_glu")}</h3>${lg?`<div class="x-row"><span class="x-big">${lg.v}</span><span class="x-unit">mmol/L · ${xDay(lg.d)}</span>${lg.v<3.9||lg.v>=13.9?xPill("rd_p_urgent","p-bad"):lg.v>10?xPill("rd_p_high","p-warn"):xPill("rd_p_ok","p-good")}</div>`:""}${xSpark(gl.map(r=>r.v),null,10)}<span class="x-note">${T("rd_glu_note")}</span>
+      <form class="x-form" data-xf="glu"><input name="v" inputmode="decimal" placeholder="6.4" aria-label="${T("rd_glu")}"><button class="x-btn pri">${T("rd_add")}</button></form></div></div>`;
+  h+=`<div class="panel"><div class="x-h3"><h3>${T("esc_title")}</h3><button class="x-btn" data-x="chat" data-a="callback">${T("esc_nurse")}</button></div>${v.esc.length?`<ul class="x-list">${v.esc.slice(0,8).map(e=>`<li><span class="x-grow"><b>${T("esc_k_"+e.k)}</b><small>${xDay(e.d)} · ${T("esc_l"+e.level)}</small></span>${xPill(e.level>=4?"rd_p_urgent":"esc_logged",e.level>=4?"p-bad":"p-mute")}</li>`).join("")}</ul>`:`<span class="x-note">${T("esc_none")}</span>`}
+    <span class="x-note">${T("esc_ladder")}</span></div><div class="min-note">${T("md_note")}</div>`;return h}
+
+/* ----- Privacy and consent ----- */
+function hqPrivacy(){const v=V();const C=["coach","wear","records","circle","sponsor","research"];
+  let h=xH("pr")+`<div class="panel"><h3>${T("pr_consents")}</h3>${C.map(k=>`<div class="x-sw"><div><b>${T("cs_"+k)}</b><small>${T("cs_"+k+"_d")}</small></div>${xTog("consent",k,v.consent[k])}</div>`).join("")}</div>`;
+  h+=`<div class="grid2"><div class="panel"><h3>${T("pr_regional")}</h3><div class="x-sw"><div><b>${T("pr_ramadan")}</b><small>${T("pr_ramadan_d")}</small></div>${xTog("ramadan","1",v.ramadan)}</div><div class="x-sw"><div><b>${T("pr_quiet")}</b><small>${T("pr_quiet_d")}</small></div>${xTog("quiet","1",v.quiet)}</div><span class="x-note">${T("pr_hijri")}: ${(()=>{try{return new Intl.DateTimeFormat((S.lang==="ar"?"ar":"en")+"-u-ca-islamic-umalqura",{day:"numeric",month:"long",year:"numeric"}).format(vDate())}catch(e){return"–"}})()}</span></div>
+    <div class="panel"><h3>${T("pr_rights")}</h3><div class="x-row"><button class="x-btn pri" data-x="export">${T("pr_export")}</button><button class="x-btn danger" data-x="delete">${T(v.del?"pr_delete_sent":"pr_delete")}</button></div>${v.del?`<span class="x-note">${T("pr_delete_note")}</span>`:""}<span class="x-note">${T("pr_ai")}</span><span class="x-note">${T("pr_law")}</span></div></div>`;
+  h+=`<div class="panel"><h3>${T("pr_audit")}</h3><ul class="x-list">${v.audit.slice(0,12).map(a=>`<li><span class="x-grow">${T(a.k,a.v||{})}</span><span class="x-note">${xDay(a.d)}</span></li>`).join("")}</ul><span class="x-note">${T("pr_audit_note")}</span></div>`;return h}
+
+window.V3TABS={circle:hqCircle,rewards:hqRewards,prevention:hqPrevention,meds:hqMeds,privacy:hqPrivacy};
+
+/* Overview: signals, points and what is due next */
+function v3AfterHQ(){if(S.hqTab!=="overview"||!S.name)return;const v=V();const due=v.gaps.filter(g=>g.status==="due").sort((a,b)=>a.due-b.due)[0];const ch=v.chal.find(c=>c.state==="active");
+  const sg=v.signals.slice(0,3).map(s=>`<div class="x-sig ${s.state==="resolved"?"ok":""}"><b>${T("sgt_"+s.kind)}</b><span class="x-note">${xDay(s.d)} · ${T("sgs_"+s.state)}</span></div>`).join("")||`<span class="x-note">${T("ov_nosig")}</span>`;
+  const d=document.createElement("div");d.className="grid2";d.innerHTML=`<div class="panel"><div class="x-h3"><h3>${T("ov_signals")}</h3><button class="x-btn" data-x="chat" data-a="signal">${T("ov_sim_signal")}</button></div>${sg}<span class="x-note">${T("ov_sig_note")}</span></div>
+    <div class="panel"><h3>${T("ov_next")}</h3><ul class="x-list">
+      <li><span class="x-grow"><b>${vNum(v.pts.bal)} ${T("pts")}</b><small>${T("ov_pts_note")}</small></span><button class="x-btn" data-goto="rewards">${T("open")}</button></li>
+      ${due?`<li><span class="x-grow"><b>${T("gap_"+due.id)}</b><small>${T(due.due<=v.day?"gp_overdue":"gp_due")}</small></span><button class="x-btn" data-goto="prevention">${T("open")}</button></li>`:""}
+      ${ch?`<li><span class="x-grow"><b>${T("tpl_"+ch.tpl)}</b><small>${T("ci_day",{d:Math.min(ch.data.me.length,ch.days),n:ch.days})}</small></span><button class="x-btn" data-goto="circle">${T("open")}</button></li>`:`<li><span class="x-grow"><b>${T("ci_title")}</b><small>${T("ov_circle_note")}</small></span><button class="x-btn" data-goto="circle">${T("open")}</button></li>`}</ul></div>`;
+  hqMain.appendChild(d)}
+
+/* HQ actions */
+function v3Find(a){const[cid,mid]=a.split("|");const c=V().circles.find(x=>x.id===cid);return{c,m:c&&c.members.find(x=>x.id===mid)}}
+function v3Act(x,a,el){const v=V();
+  if(x==="chat"){const[k,id]=(a||"").split("|");const c=v.circles[0];setView("chat");
+    ({circle:v3CircleHome,chal:()=>c?v3ChalNew(c):v3CircleHome(),relay:()=>c?v3RelayPick(c):v3CircleHome(),coord:()=>c?v3CoordPick(c):v3CircleHome(),meds:v3MedsChat,signal:()=>v3Signal(),callback:()=>{v3Enter();v3Callback("hq")},
+      gap:()=>v3GapCard(v.gaps.find(g=>g.id===id)),pop:()=>v3PopInvite(v.pop.find(p=>p.id===id))}[k]||v3Menu)();return}
+  if(x==="mute"){const{m}=v3Find(a);if(m)m.muted=!m.muted}
+  else if(x==="remove"){const{c,m}=v3Find(a);if(c&&m){c.members=c.members.filter(y=>y!==m);v.chal.forEach(ch=>{if(ch.circle===c.id){delete ch.data[m.id];delete ch.acc[m.id]}});v3Audit("a_remove",{name:nm(cm(m.id))})}}
+  else if(x==="block"){const{c,m}=v3Find(a);if(m){m.blocked=!m.blocked;if(m.blocked){m.state="removed";v.chal.forEach(ch=>{if(ch.circle===c.id){delete ch.data[m.id];delete ch.acc[m.id]}})}else m.state="invited";v3Audit(m.blocked?"a_block":"a_unblock",{name:nm(cm(m.id))})}}
+  else if(x==="share"){const c=v.circles.find(y=>y.id===a);if(c){c.share=c.share==="steps"?"prog":"steps";v3Audit("a_share",{what:T(c.share==="steps"?"c_share_steps":"c_share_prog")})}}
+  else if(x==="leave"){if(el.dataset.sure){v.circles=v.circles.filter(c=>c.id!==a);v.chal=v.chal.filter(c=>c.circle!==a);v3Audit("a_leave")}else{el.dataset.sure=1;el.textContent=T("sure");return}}
+  else if(x==="quit"){const ch=v.chal.find(c=>c.id===a);if(ch){ch.state="declined";v3Audit("a_quit")}}
+  else if(x==="popquit"){const p=v.pop.find(y=>y.id===a);if(p){p.state="declined";p.mine=0}}
+  else if(x==="report"){const r=v.relay.find(y=>y.id===a);if(r&&!r.reported){r.reported=true;v3Audit("a_report",{name:nm(cm(r.who))})}}
+  else if(x==="redeem"){const r=V3R.find(y=>y.id===a);if(r&&v.pts.bal>=r.cost){v.pts.bal-=r.cost;v.pts.ledger.unshift({d:v.day,k:"rwd_"+r.id,pts:-r.cost,ver:""});const rr=vRng(r.id+Date.now());v.redeemed.unshift({id:r.id,d:v.day,code:"ELIA-"+Array.from({length:6},()=>"ABCDEFGHJKMNPQRSTUVWXYZ23456789"[Math.floor(rr()*31)]).join("")});v3Audit("a_redeem",{what:T("rwd_"+r.id)})}}
+  else if(x==="gapdone"){const g=v.gaps.find(y=>y.id===a);if(g){g.status="done";g.self=true;g.doneOn=v.day;v3Pts("p_gap_self",10,"self")}}
+  else if(x==="refill"){const m=v.meds.find(y=>y.id===a);if(m){m.refill=v.day;v3Audit("a_refill",{med:T("med_"+m.id)})}}
+  else if(x==="consent"){v.consent[a]=!v.consent[a];v3Audit("a_consent_set",{what:T("cs_"+a),state:T(v.consent[a]?"on":"off")})}
+  else if(x==="ramadan"){v.ramadan=!v.ramadan}else if(x==="quiet"){v.quiet=!v.quiet}
+  else if(x==="delete"){if(v.del)return;if(el.dataset.sure){v.del=true;v3Audit("a_delete")}else{el.dataset.sure=1;el.textContent=T("sure");return}}
+  else if(x==="export"){const data={exported:new Date().toISOString(),profile:{name:S.name,goal:S.goal,facts:Object.fromEntries(Object.entries(S.facts||{}).map(([k,f])=>{try{return[k,fv(f)]}catch(e){return[k,""]}}))},plan:S.plan,consents:v.consent,points:v.pts,care_gaps:v.gaps,medications:v.meds,readings:{blood_pressure:v.bp,glucose:v.glu},circles:v.circles,challenges:v.chal,relayed_messages:v.relay,escalations:v.esc,audit:v.audit};
+    try{const u=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}));const l=document.createElement("a");l.href=u;l.download="elia-my-data.json";document.body.appendChild(l);l.click();l.remove();setTimeout(()=>URL.revokeObjectURL(u),4000)}catch(e){}v3Audit("a_export");}
+  renderHQ()}
+hqMain.addEventListener("click",e=>{const b=e.target.closest("[data-x]");if(!b||b.closest("form"))return;e.preventDefault();v3Act(b.dataset.x,b.dataset.a,b)});
+hqMain.addEventListener("submit",e=>{const f=e.target.closest("[data-xf]");if(!f)return;e.preventDefault();const val=f.elements.v.value.trim();if(!val)return;setView("chat");v3Enter();user(esc((f.dataset.xf==="bp"?"BP ":"Glucose ")+val));v3Reading((f.dataset.xf==="bp"?"BP ":"glucose ")+val)});
+
+/* ===== ELIA v3: ministry and sponsor view (aggregated, de-identified, synthetic figures) ===== */
+const MIN={prog:"all",age:"all",metric:"active",open:false,list:null};
+const MIN_PROG={all:1,dpp:0.34,htn:0.27,weight:0.39},MIN_AGE={all:1,a1:0.22,a2:0.36,a3:0.30,a4:0.12},MIN_CELL=50;
+function minRows(){return V3G.map(g=>{const r=vRng("min|"+g[0]+"|"+MIN.prog+"|"+MIN.age);const n=Math.round(g[3]*MIN_PROG[MIN.prog]*MIN_AGE[MIN.age]);
+  return{g,n,sup:n<MIN_CELL,active:Math.round(48+r()*24),gaps:Math.round(22+r()*25),steps:Math.round(5200+r()*2700),high:Math.round(13+r()*11),rising:Math.round(27+r()*10),ver:Math.round((3+r()*3)*10)/10,esc:Math.round(6+r()*8)}})}
+function minPops(){const v=V();return v.pop}
+function minRender(){const el=$("#minView");if(!el||el.hidden)return;const R=minRows(),ok=R.filter(r=>!r.sup);const tot=ok.reduce((a,r)=>a+r.n,0);const w=k=>tot?ok.reduce((a,r)=>a+r[k]*r.n,0)/tot:0;
+  const gapsClosed=Math.round(tot*w("gaps")/100*1.7),verified=Math.round(tot*w("active")/100*w("ver")),high=w("high"),rising=w("rising"),low=100-high-rising;
+  const M={active:["%",100],gaps:["%",60],steps:["",9000],ver:["",7],esc:["",16]};const mx=M[MIN.metric][1];
+  const trend=Array.from({length:12},(_,i)=>{const r=vRng("tr|"+i+MIN.prog+MIN.age);return Math.round(w("active")-11+i*1+r()*3)});
+  const sel=(id,cur,opts)=>`<select data-min="${id}">${opts.map(o=>`<option value="${o}"${o===cur?" selected":""}>${T("min_"+id+"_"+o)}</option>`).join("")}</select>`;
+  const pops=minPops();
+  el.innerHTML=`<div class="min-wrap">
+    <div class="min-head"><div><div class="min-role"><span class="x-vtag">${T("min_tag")}</span><span>${T("min_role")}</span></div><h1>${T("min_title")}</h1><p>${T("min_sub")}</p></div>
+      <div class="x-row"><button class="x-btn" data-min-act="csv">${T("min_csv")}</button><button class="x-btn pri" data-min-act="close">${T("min_close")}</button></div></div>
+    <div class="min-filters"><label>${T("min_f_prog")} ${sel("prog",MIN.prog,Object.keys(MIN_PROG))}</label><label>${T("min_f_age")} ${sel("age",MIN.age,Object.keys(MIN_AGE))}</label><span>${T("min_asof",{when:vFmt(vDate(),{day:"numeric",month:"long",year:"numeric"})})}</span></div>
+    <div class="x-tiles">
+      <div class="x-tile"><b>${vNum(tot)}</b><span>${T("min_k_enrolled")}</span></div>
+      <div class="x-tile"><b>${Math.round(w("active"))}%</b><span>${T("min_k_active")}</span><em>+${trend[11]-trend[7]} ${T("min_pp")}</em></div>
+      <div class="x-tile"><b>${vNum(verified)}</b><span>${T("min_k_verified")}</span></div>
+      <div class="x-tile"><b>${vNum(gapsClosed)}</b><span>${T("min_k_gaps")}</span></div>
+      <div class="x-tile"><b>${Math.round(high)}%</b><span>${T("min_k_high")}</span></div>
+      <div class="x-tile"><b>${vNum(Math.round(gapsClosed*14.5/100)*100)}</b><span>${T("min_k_cost")}</span></div>
+    </div>
+    <div class="min-grid">
+      <div class="panel"><div class="x-h3"><h3>${T("min_by_gov")}</h3>${sel("metric",MIN.metric,Object.keys(M))}</div>
+        <div class="min-bars">${R.map(r=>r.sup?`<div><span>${gName(r.g)}</span><span class="sup">${T("min_sup",{n:MIN_CELL})}</span></div>`:`<div><span>${gName(r.g)}</span><div class="x-bar"><i style="width:${Math.min(100,r[MIN.metric]/mx*100)}%"></i></div><span class="v">${MIN.metric==="steps"?vNum(r.steps):r[MIN.metric]}${M[MIN.metric][0]}</span></div>`).join("")}</div>
+        <span class="x-note">${T("min_metric_note_"+MIN.metric)}</span></div>
+      <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+        <div class="panel"><h3>${T("min_risk")}</h3><div class="min-stack"><i style="width:${low}%;background:var(--good)"></i><i style="width:${rising}%;background:var(--warn)"></i><i style="width:${high}%;background:var(--bad)"></i></div>
+          <div class="min-leg"><span style="--c:var(--good)">${T("min_r_low")} ${Math.round(low)}%</span><span style="--c:var(--warn)">${T("min_r_rising")} ${Math.round(rising)}%</span><span style="--c:var(--bad)">${T("min_r_high")} ${Math.round(high)}%</span></div><span class="x-note">${T("min_risk_note")}</span></div>
+        <div class="panel"><h3>${T("min_trend")}</h3>${xSpark(trend)}<span class="x-note">${T("min_trend_note")}</span></div>
+        <div class="panel"><h3>${T("min_equity")}</h3><div class="min-bars">${[["min_e_w",52],["min_e_m",48],["min_age_a1",17],["min_age_a2",35],["min_age_a3",33],["min_age_a4",15]].map(([k,n])=>`<div><span>${T(k)}</span><div class="x-bar"><i style="width:${n}%"></i></div><span class="v">${n}%</span></div>`).join("")}</div><span class="x-note">${T("min_equity_note")}</span></div>
+      </div>
+    </div>
+    <div class="panel"><div class="x-h3"><h3>${T("min_pop")}</h3></div>
+      <div class="x-scroll"><table class="x-table"><thead><tr><th>${T("min_c_name")}</th><th>${T("min_c_metric")}</th><th class="n">${T("min_c_days")}</th><th class="n">${T("min_c_inv")}</th><th class="n">${T("min_c_join")}</th><th>${T("min_c_lead")}</th></tr></thead><tbody>
+      ${pops.map(p=>{const B=vPopBoard(p).filter(r=>!r.sup);const inv=Math.round(V3G.reduce((a,g)=>a+g[3],0)*0.81),r=vRng("pj|"+p.id);const join=Math.round(inv*(p.id==="omanwalks"?0.27:0.02+r()*0.03));return`<tr><td><b>${esc(pName(p))}</b></td><td>${T("tpl_"+p.metric)}</td><td class="n">${p.days}</td><td class="n">${vNum(inv)}</td><td class="n">${vNum(join)}</td><td>${gName(B[0].g)} · ${B[0].sc}%</td></tr>`}).join("")}</tbody></table></div>
+      <form class="min-form" id="minForm"><label>${T("min_c_name")}<input name="name" required maxlength="60" placeholder="${T("min_ph_name")}"></label>
+        <label>${T("min_c_metric")}<select name="metric">${Object.keys(V3T).map(k=>`<option value="${k}">${T("tpl_"+k)}</option>`).join("")}</select></label>
+        <label>${T("min_c_days")}<select name="days"><option>14</option><option selected>30</option><option>60</option></select></label>
+        <label>${T("min_c_reward")}<select name="pts"><option>100</option><option selected>150</option><option>250</option></select></label>
+        <button class="x-btn pri">${T("min_create")}</button></form>
+      <span class="x-note">${T("min_pop_note")}</span></div>
+    <div class="min-note">${T("min_protect",{n:MIN_CELL})}</div></div>`}
+function minOpen(){let el=$("#minView");if(!el){el=document.createElement("div");el.id="minView";el.setAttribute("role","dialog");el.setAttribute("aria-label","Ministry view");$("#app").appendChild(el);
+    el.addEventListener("change",e=>{const s=e.target.closest("[data-min]");if(s){MIN[s.dataset.min]=s.value;minRender()}});
+    el.addEventListener("click",e=>{const b=e.target.closest("[data-min-act]");if(!b)return;if(b.dataset.minAct==="close"){el.hidden=true;return}
+      if(b.dataset.minAct==="csv"){const R=minRows();const rows=[["governorate","enrolled","weekly_active_pct","care_gaps_closed_pct","avg_daily_steps","verified_actions_per_member_week","high_risk_pct","escalations_per_1000"],...R.map(r=>r.sup?[r.g[1],"suppressed","","","","","",""]:[r.g[1],r.n,r.active,r.gaps,r.steps,r.ver,r.high,r.esc])];
+        try{const u=URL.createObjectURL(new Blob([rows.map(r=>r.join(",")).join("\n")],{type:"text/csv"}));const l=document.createElement("a");l.href=u;l.download="elia-programme-aggregate.csv";document.body.appendChild(l);l.click();l.remove();setTimeout(()=>URL.revokeObjectURL(u),4000)}catch(e){}v3Audit("a_min_export")}});
+    el.addEventListener("submit",e=>{if(e.target.id!=="minForm")return;e.preventDefault();const f=e.target.elements;const name=f.name.value.trim();if(!name)return;const p={id:"p"+Date.now(),name:{en:name,ar:name},by:"moh",metric:f.metric.value,days:+f.days.value,state:"invited",start:V().day,pts:+f.pts.value,mine:0};V().pop.unshift(p);v3Audit("a_min_pop",{name});minRender();
+      /* the member sees the invitation in chat (only when they allow programme messages) */
+      el.hidden=true;v3PopInvite(p)})}
+  el.hidden=false;v3Audit("a_min_view");minRender();el.scrollTop=0}
+
+/* ----- wiring: header, quick actions, language ----- */
+(function(){
+  const top=document.querySelector("header.top"),pt=$("#presToggle");
+  if(top&&pt){const b=document.createElement("button");b.className="pbtn";b.id="minBtn";b.innerHTML=`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V10M19 21V10M9 21v-7M15 21v-7M2 10l10-6 10 6"/></svg><span data-t="x_min_btn"></span>`;pt.after(b);b.onclick=minOpen;
+    const d=document.createElement("button");d.className="pbtn";d.id="dayBtn";d.innerHTML=`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 4l10 8-10 8zM19 5v14"/></svg><span data-t="x_next_day"></span>`;b.after(d);d.onclick=()=>{if(!S.name){loadPersona();S.langChosen=true}v3NextDay(1)};
+    const tag=document.createElement("span");tag.className="x-vtag";tag.textContent="v3 prototype";d.after(tag)}
+  const pr=$("#presenter"),rs=$("#pReset");
+  if(pr&&rs){[["x_p_circle",()=>v3CircleHome()],["x_p_incoming",()=>v3Incoming()],["x_p_signal",()=>v3Signal()],["x_p_gap",()=>v3GapsChat()],["x_p_meds",()=>v3MedsChat()],["x_p_reading",()=>v3AskReading()],["x_p_week",()=>v3Week()],["x_p_pop",()=>v3PopInvite()],["x_p_week7",()=>v3NextDay(7)]].forEach(([k,fn])=>{const b=document.createElement("button");b.dataset.t=k;b.textContent=t(k);b.onclick=()=>{if(!S.name){loadPersona();S.langChosen=true}fn()};pr.insertBefore(b,rs)})}
+  document.querySelectorAll("[data-t^='x_']").forEach(e=>{e.textContent=t(e.dataset.t)});
+  $("#langSeg").addEventListener("click",()=>setTimeout(minRender,0));
+})();
+
+</script>
 
 </body>
 </html>
